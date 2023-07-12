@@ -1,5 +1,9 @@
 use chrono::{prelude::*, Days};
-use std::{f32::consts::PI, fs, time::Instant};
+use std::{
+    f32::consts::PI,
+    fs,
+    time::{Duration, Instant},
+};
 
 use super::schema::KmaResponseFull;
 
@@ -81,6 +85,7 @@ async fn query_kma(lat: f32, lng: f32) -> Result<KmaResponseFull, String> {
                     Err(e) => {
                         if i < NUM_RETRIES {
                             println!("Retrying... {i}/{NUM_RETRIES}");
+                            tokio::time::sleep(Duration::from_secs(1)).await;
                             continue;
                         } else {
                             return Err(e.to_string());
@@ -91,6 +96,7 @@ async fn query_kma(lat: f32, lng: f32) -> Result<KmaResponseFull, String> {
             Err(e) => {
                 if i < NUM_RETRIES {
                     println!("Retrying... {i}/{NUM_RETRIES}");
+                    tokio::time::sleep(Duration::from_secs(1)).await;
                     continue;
                 } else {
                     return Err(e.to_string());
