@@ -25,6 +25,13 @@ impl EventHandler for Handler {
 
             let weather_info = kma::func::get_weather().await;
             if let Err(why) = weather_info {
+                if let Err(why) = msg
+                    .channel_id
+                    .say(&ctx.http, "Error occured during KMA request: {:?}")
+                    .await
+                {
+                    println!("Error sending message: {:?}", why);
+                }
                 println!("Error during retrieving weather information: {:?}", why);
             } else if let Err(why) = msg.channel_id.say(&ctx.http, weather_info.unwrap()).await {
                 println!("Error sending message: {:?}", why);
