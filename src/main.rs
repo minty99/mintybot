@@ -27,7 +27,10 @@ impl EventHandler for Handler {
             if let Err(why) = weather_info {
                 if let Err(why) = msg
                     .channel_id
-                    .say(&ctx.http, "Error occured during KMA request: {:?}")
+                    .say(
+                        &ctx.http,
+                        format!("Error occured during KMA request: {:?}", why),
+                    )
                     .await
                 {
                     println!("Error sending message: {:?}", why);
