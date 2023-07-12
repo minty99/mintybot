@@ -1,0 +1,25 @@
+[package]
+name = "mintybot"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+chrono = "0.4.40"
+eyre = "0.6.12"
+reqwest = { version = "0.11.24", features = ["json"] }
+scraper = "0.18.1"
+serde = "1.0.190"
+serde_json = "1.0.140"
+serenity = { version = "0.11.7", default-features = false, features = [
+    "client",
+    "gateway",
+    "rustls_backend",
+    "model",
+] }
+tokio = { version = "1.44.2", features = ["full"] }
+lazy_static = "1.5.0"
+tracing = "0.1.41"
+itertools = "0.13.0"
+tracing-subscriber = "0.3.18"

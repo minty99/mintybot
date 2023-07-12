@@ -1,0 +1,41 @@
+name: Deployment
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+env:
+  REGISTRY: minty99
+  IMAGE_NAME: mintybot
+  TAG: ${{ github.sha }}
+  DEPLOY: ${{ github.event_name == 'push' || github.ref == 'refs/heads/main' }}
+  GITHUB_TOKEN: ${{ secrets.ARGO_MANIFESTS_TOKEN }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Login to Docker Hub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+      - name: Build the Docker image
+        run: docker build . --file Dockerfile --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}
+      - name: Push the Docker image
+        run: docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}
+      - name: Deploy by updating the argo manifest
+        if: ${{ env.DEPLOY }}
+        run: |
+          git config --global user.email "mhkim4886@gmail.com"
+          git config --global user.name "Muhwan Kim"
+          git clone https://minty99:${{ env.GITHUB_TOKEN }}@github.com/minty99/argo-manifests.git /tmp/argo-manifests
+          cd /tmp/argo-manifests
+          sed -i 's|image: minty99/mintybot:.*|image: minty99/mintybot:${{ env.TAG }}|' apps/mintybot/mintybot.yaml
+          git add apps/mintybot/mintybot.yaml
+          git commit -m "Update mintybot image to ${{ env.TAG }}"
+          git push origin main
