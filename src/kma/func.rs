@@ -41,6 +41,8 @@ pub async fn get_weather() -> Result<String, String> {
 }
 
 async fn query_kma(lat: f32, lng: f32) -> Result<KmaResponseFull, String> {
+    const NUM_RETRIES: usize = 3;
+
     let base_url = "http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst";
     let service_key =
         fs::read_to_string(".kma_api_key").expect("Should have been able to read the file");
@@ -50,35 +52,53 @@ async fn query_kma(lat: f32, lng: f32) -> Result<KmaResponseFull, String> {
     let (base_date, base_time) = get_base_date()?;
     let (nx, ny) = dfs_xy_conv(lat, lng);
 
-    let client = reqwest::Client::new();
-    let before = Instant::now();
-    let result = client
-        .get(base_url)
-        .query(&[
-            ("serviceKey", service_key),
-            ("pageNo", page_no),
-            ("numOfRows", num_of_rows),
-            ("dataType", data_type),
-            ("base_date", base_date),
-            ("base_time", base_time),
-            ("nx", nx.to_string()),
-            ("ny", ny.to_string()),
-        ])
-        .send()
-        .await;
-    let after = Instant::now();
-    println!("KMA request time: {}ms", (after - before).as_millis());
+    for i in 1..=NUM_RETRIES {
+        let client = reqwest::Client::new();
+        let before = Instant::now();
+        let result = client
+            .get(base_url)
+            .query(&[
+                ("serviceKey", &service_key),
+                ("pageNo", &page_no),
+                ("numOfRows", &num_of_rows),
+                ("dataType", &data_type),
+                ("base_date", &base_date),
+                ("base_time", &base_time),
+                ("nx", &nx.to_string()),
+                ("ny", &ny.to_string()),
+            ])
+            .timeout(std::time::Duration::from_secs(3)) // Timeout 3s
+            .send()
+            .await;
+        let after = Instant::now();
+        println!("KMA request time: {}ms", (after - before).as_millis());
 
-    match result {
-        Ok(result) => {
-            let deserialized = result.json::<KmaResponseFull>().await;
-            match deserialized {
-                Ok(obj) => Ok(obj),
-                Err(e) => Err(e.to_string()),
+        match result {
+            Ok(result) => {
+                let deserialized = result.json::<KmaResponseFull>().await;
+                match deserialized {
+                    Ok(obj) => return Ok(obj),
+                    Err(e) => {
+                        if i < NUM_RETRIES {
+                            println!("Retrying... {i}/{NUM_RETRIES}");
+                            continue;
+                        } else {
+                            return Err(e.to_string());
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                if i < NUM_RETRIES {
+                    println!("Retrying... {i}/{NUM_RETRIES}");
+                    continue;
+                } else {
+                    return Err(e.to_string());
+                }
             }
         }
-        Err(e) => Err(e.to_string()),
     }
+    Err("Failed to request KMA after 3 retries".to_string())
 }
 
 /// 위경도 -> 기상청 좌표
