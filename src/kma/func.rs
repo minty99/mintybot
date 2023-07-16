@@ -7,6 +7,7 @@ use std::{
 
 use super::schema::KmaResponseFull;
 
+#[derive(Debug)]
 pub enum KmaError {
     HttpError(reqwest::Error),
     JsonError(serde_json::Error, String),
@@ -19,17 +20,7 @@ impl From<reqwest::Error> for KmaError {
     }
 }
 
-impl From<KmaError> for String {
-    fn from(err: KmaError) -> String {
-        match err {
-            KmaError::HttpError(err) => format!("HttpError: {}", err),
-            KmaError::JsonError(err, text) => format!("JsonError: {} ({})", err, text),
-            KmaError::DateCalcError(dt) => format!("DateCalcError: {}", dt),
-        }
-    }
-}
-
-pub async fn get_weather() -> Result<String, String> {
+pub async fn get_weather() -> Result<String, KmaError> {
     let (lat, lng) = (37.4781098, 126.9489182); // 관악구청
     let response = query_kma(lat, lng, 3).await?;
 
