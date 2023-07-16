@@ -7,9 +7,32 @@ use std::{
 
 use super::schema::KmaResponseFull;
 
+pub enum KmaError {
+    HttpError(reqwest::Error),
+    JsonError(serde_json::Error, String),
+    DateCalcError(DateTime<FixedOffset>),
+}
+
+impl From<reqwest::Error> for KmaError {
+    fn from(err: reqwest::Error) -> KmaError {
+        KmaError::HttpError(err)
+    }
+}
+
+impl From<KmaError> for String {
+    fn from(err: KmaError) -> String {
+        match err {
+            KmaError::HttpError(err) => format!("HttpError: {}", err),
+            KmaError::JsonError(err, text) => format!("JsonError: {} ({})", err, text),
+            KmaError::DateCalcError(dt) => format!("DateCalcError: {}", dt),
+        }
+    }
+}
+
 pub async fn get_weather() -> Result<String, String> {
     let (lat, lng) = (37.4781098, 126.9489182); // 관악구청
-    let response = query_kma(lat, lng).await?;
+    let response = query_kma(lat, lng, 3).await?;
+
     let items = response.response.body.items.item.clone();
     let rain_probs: Vec<String> = items
         .iter()
@@ -44,9 +67,23 @@ pub async fn get_weather() -> Result<String, String> {
     ))
 }
 
-async fn query_kma(lat: f32, lng: f32) -> Result<KmaResponseFull, String> {
-    const NUM_RETRIES: usize = 3;
+async fn query_kma(lat: f32, lng: f32, num_retries: u32) -> Result<KmaResponseFull, KmaError> {
+    for i in 0..num_retries {
+        let result = _query_kma(lat, lng).await;
+        match result {
+            Ok(response) => return Ok(response),
+            Err(err) => {
+                if i + 1 == num_retries {
+                    return Err(err);
+                }
+                println!("query_kma: retrying ({}/{})", i + 1, num_retries);
+            }
+        }
+    }
+    unreachable!("query_kma: unreachable!")
+}
 
+async fn _query_kma(lat: f32, lng: f32) -> Result<KmaResponseFull, KmaError> {
     let base_url = "http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst";
     let service_key =
         fs::read_to_string(".kma_api_key").expect("Should have been able to read the file");
@@ -56,66 +93,33 @@ async fn query_kma(lat: f32, lng: f32) -> Result<KmaResponseFull, String> {
     let (base_date, base_time) = get_base_date()?;
     let (nx, ny) = dfs_xy_conv(lat, lng);
 
-    for i in 1..=NUM_RETRIES {
-        let client = reqwest::Client::new();
-        let before = Instant::now();
-        let result = client
-            .get(base_url)
-            .query(&[
-                ("serviceKey", &service_key),
-                ("pageNo", &page_no),
-                ("numOfRows", &num_of_rows),
-                ("dataType", &data_type),
-                ("base_date", &base_date),
-                ("base_time", &base_time),
-                ("nx", &nx.to_string()),
-                ("ny", &ny.to_string()),
-            ])
-            .timeout(Duration::from_secs(3))
-            .send()
-            .await;
+    let client = reqwest::Client::new();
+    let before = Instant::now();
+    let response = client
+        .get(base_url)
+        .query(&[
+            ("serviceKey", &service_key),
+            ("pageNo", &page_no),
+            ("numOfRows", &num_of_rows),
+            ("dataType", &data_type),
+            ("base_date", &base_date),
+            ("base_time", &base_time),
+            ("nx", &nx.to_string()),
+            ("ny", &ny.to_string()),
+        ])
+        .timeout(Duration::from_secs(3))
+        .send()
+        .await?;
 
-        let after = Instant::now();
-
-        // TODO more simple implementation using async closures?
-        let result = match result {
-            Ok(result) => {
-                println!(
-                    "GET {} ({}) [{} ms]",
-                    result.url(),
-                    result.status(),
-                    (after - before).as_millis()
-                );
-                let text_result = result.text().await;
-                match text_result {
-                    Ok(text) => {
-                        serde_json::from_str(&text).map_err(|e| {
-                            // Parse error
-                            dbg!("serde_json::from_str() failed");
-                            dbg!(text);
-                            e.to_string()
-                        })
-                    }
-                    Err(e) => Err(e.to_string()),
-                }
-            }
-            Err(e) => Err(e.to_string()),
-        };
-
-        match result {
-            Ok(result) => return Ok(result),
-            Err(e) => {
-                if i < NUM_RETRIES {
-                    println!("Retrying... {i}/{NUM_RETRIES} {:?}", e);
-                    tokio::time::sleep(Duration::from_secs(1)).await;
-                    continue;
-                } else {
-                    return Err(e.to_string());
-                }
-            }
-        }
-    }
-    unreachable!();
+    let after = Instant::now();
+    println!(
+        "GET {} ({}) [{} ms]",
+        response.url(),
+        response.status(),
+        (after - before).as_millis()
+    );
+    let text = response.text().await?;
+    serde_json::from_str::<KmaResponseFull>(&text).map_err(|err| KmaError::JsonError(err, text))
 }
 
 /// 위경도 -> 기상청 좌표
@@ -170,10 +174,12 @@ fn dfs_xy_conv(lat: f32, lng: f32) -> (u32, u32) {
     (x, y)
 }
 
-fn get_base_date() -> Result<(String, String), String> {
+fn get_base_date() -> Result<(String, String), KmaError> {
     let tz = FixedOffset::east_opt(9 * 60 * 60).unwrap();
     let current = Local::now().with_timezone(&tz); // ensure UTC+09:00
     let yesterday = current.checked_sub_days(Days::new(1)).unwrap();
+
+    // TODO generate candidates from scratch, not modifying current time object
 
     // 단기예보 base_time: 0200, 0500, 0800, 1100, 1400, 1700, 2000, 2300
     // 각 base_time 기준으로 10분 이상 지난 것들 중 가장 최근인 것 선택
@@ -206,5 +212,5 @@ fn get_base_date() -> Result<(String, String), String> {
             return Ok((base_date, base_time));
         }
     }
-    Err("get_base_date: unreachable!".to_string())
+    Err(KmaError::DateCalcError(current))
 }
