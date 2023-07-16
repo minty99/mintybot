@@ -28,7 +28,7 @@ impl EventHandler for Handler {
                 Err(why) => {
                     if let Err(why) = msg
                         .channel_id
-                        .say(&ctx.http, format!("Internal error occured: {:?}", why))
+                        .say(&ctx.http, format!("Internal error occured: {}", why))
                         .await
                     {
                         println!("Error sending message: {:?}", why);

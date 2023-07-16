@@ -24,9 +24,9 @@ impl From<reqwest::Error> for KmaError {
 impl Display for KmaError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            KmaError::Http(err) => write!(f, "HttpError: {}", err),
-            KmaError::Json(err, _text) => write!(f, "JsonError: {}", err), // Hide raw text here
-            KmaError::DateCalc(dt) => write!(f, "DateCalcError: {}", dt),
+            KmaError::Http(err) => write!(f, "KmaError::Http: {}", err),
+            KmaError::Json(err, _text) => write!(f, "KmaError::Json: {}", err), // Hide raw text here
+            KmaError::DateCalc(dt) => write!(f, "KmaError::DateCalc: {}", dt),
         }
     }
 }
