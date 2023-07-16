@@ -74,28 +74,34 @@ async fn query_kma(lat: f32, lng: f32) -> Result<KmaResponseFull, String> {
             .timeout(Duration::from_secs(3)) // Timeout 3s
             .send()
             .await;
+
         let after = Instant::now();
         println!("KMA request time: {}ms", (after - before).as_millis());
 
-        match result {
+        // TODO more simple implementation using async closures?
+        let result = match result {
             Ok(result) => {
-                let deserialized = result.json::<KmaResponseFull>().await;
-                match deserialized {
-                    Ok(obj) => return Ok(obj),
-                    Err(e) => {
-                        if i < NUM_RETRIES {
-                            println!("Retrying... {i}/{NUM_RETRIES}");
-                            tokio::time::sleep(Duration::from_secs(1)).await;
-                            continue;
-                        } else {
-                            return Err(e.to_string());
-                        }
+                let text_result = result.text().await;
+                match text_result {
+                    Ok(text) => {
+                        serde_json::from_str(&text).map_err(|e| {
+                            // Parse error
+                            dbg!("serde_json::from_str() failed");
+                            dbg!(text);
+                            e.to_string()
+                        })
                     }
+                    Err(e) => Err(e.to_string()),
                 }
             }
+            Err(e) => Err(e.to_string()),
+        };
+
+        match result {
+            Ok(result) => return Ok(result),
             Err(e) => {
                 if i < NUM_RETRIES {
-                    println!("Retrying... {i}/{NUM_RETRIES}");
+                    println!("Retrying... {i}/{NUM_RETRIES} {:?}", e);
                     tokio::time::sleep(Duration::from_secs(1)).await;
                     continue;
                 } else {
@@ -104,7 +110,7 @@ async fn query_kma(lat: f32, lng: f32) -> Result<KmaResponseFull, String> {
             }
         }
     }
-    Err("Failed to request KMA after 3 retries".to_string())
+    unreachable!();
 }
 
 /// 위경도 -> 기상청 좌표
