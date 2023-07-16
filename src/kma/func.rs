@@ -1,6 +1,7 @@
 use chrono::{prelude::*, Days};
 use std::{
-    f32::consts::PI,
+    f64::consts::PI,
+    fmt::{self, Display, Formatter},
     fs,
     time::{Duration, Instant},
 };
@@ -9,14 +10,24 @@ use super::schema::KmaResponseFull;
 
 #[derive(Debug)]
 pub enum KmaError {
-    HttpError(reqwest::Error),
-    JsonError(serde_json::Error, String),
-    DateCalcError(DateTime<FixedOffset>),
+    Http(reqwest::Error),
+    Json(serde_json::Error, String),
+    DateCalc(DateTime<FixedOffset>),
 }
 
 impl From<reqwest::Error> for KmaError {
     fn from(err: reqwest::Error) -> KmaError {
-        KmaError::HttpError(err)
+        KmaError::Http(err.without_url())
+    }
+}
+
+impl Display for KmaError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            KmaError::Http(err) => write!(f, "HttpError: {}", err),
+            KmaError::Json(err, text) => write!(f, "JsonError: {} ({})", err, text),
+            KmaError::DateCalc(dt) => write!(f, "DateCalcError: {}", dt),
+        }
     }
 }
 
@@ -24,7 +35,7 @@ pub async fn get_weather() -> Result<String, KmaError> {
     let (lat, lng) = (37.4781098, 126.9489182); // 관악구청
     let response = query_kma(lat, lng, 3).await?;
 
-    let items = response.response.body.items.item.clone();
+    let items = response.response.body.items.item;
     let rain_probs: Vec<String> = items
         .iter()
         .filter(|item| item.category == "POP")
@@ -58,7 +69,7 @@ pub async fn get_weather() -> Result<String, KmaError> {
     ))
 }
 
-async fn query_kma(lat: f32, lng: f32, num_retries: u32) -> Result<KmaResponseFull, KmaError> {
+async fn query_kma(lat: f64, lng: f64, num_retries: u32) -> Result<KmaResponseFull, KmaError> {
     for i in 0..num_retries {
         let result = _query_kma(lat, lng).await;
         match result {
@@ -74,7 +85,7 @@ async fn query_kma(lat: f32, lng: f32, num_retries: u32) -> Result<KmaResponseFu
     unreachable!("query_kma: unreachable!")
 }
 
-async fn _query_kma(lat: f32, lng: f32) -> Result<KmaResponseFull, KmaError> {
+async fn _query_kma(lat: f64, lng: f64) -> Result<KmaResponseFull, KmaError> {
     let base_url = "http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst";
     let service_key =
         fs::read_to_string(".kma_api_key").expect("Should have been able to read the file");
@@ -110,25 +121,25 @@ async fn _query_kma(lat: f32, lng: f32) -> Result<KmaResponseFull, KmaError> {
         (after - before).as_millis()
     );
     let text = response.text().await?;
-    serde_json::from_str::<KmaResponseFull>(&text).map_err(|err| KmaError::JsonError(err, text))
+    serde_json::from_str::<KmaResponseFull>(&text).map_err(|err| KmaError::Json(err, text))
 }
 
 /// 위경도 -> 기상청 좌표
 /// https://gist.github.com/fronteer-kr/14d7f779d52a21ac2f16 의 JS 코드를 Rust로 옮김
-fn dfs_xy_conv(lat: f32, lng: f32) -> (u32, u32) {
-    let sin = f32::sin;
-    let cos = f32::cos;
-    let tan = f32::tan;
-    let ln = f32::ln;
-    let powf = f32::powf;
-    let floor = f32::floor;
+fn dfs_xy_conv(lat: f64, lng: f64) -> (u32, u32) {
+    let sin = f64::sin;
+    let cos = f64::cos;
+    let tan = f64::tan;
+    let ln = f64::ln;
+    let powf = f64::powf;
+    let floor = f64::floor;
 
-    const RE: f32 = 6371.00877; // 지구 반경(km)
-    const GRID: f32 = 5.0; // 격자 간격(km)
-    const SLAT1: f32 = 30.0; // 투영 위도1(degree)
-    const SLAT2: f32 = 60.0; // 투영 위도2(degree)
-    const OLON: f32 = 126.0; // 기준점 경도(degree)
-    const OLAT: f32 = 38.0; // 기준점 위도(degree)
+    const RE: f64 = 6371.00877; // 지구 반경(km)
+    const GRID: f64 = 5.0; // 격자 간격(km)
+    const SLAT1: f64 = 30.0; // 투영 위도1(degree)
+    const SLAT2: f64 = 60.0; // 투영 위도2(degree)
+    const OLON: f64 = 126.0; // 기준점 경도(degree)
+    const OLAT: f64 = 38.0; // 기준점 위도(degree)
     const XO: u32 = 43; // 기준점 X좌표(GRID)
     const YO: u32 = 136; // 기1준점 Y좌표(GRID)
 
@@ -159,8 +170,8 @@ fn dfs_xy_conv(lat: f32, lng: f32) -> (u32, u32) {
     }
     theta *= sn;
 
-    let x = floor(ra * sin(theta) + XO as f32 + 0.5) as u32;
-    let y = floor(ro - ra * cos(theta) + YO as f32 + 0.5) as u32;
+    let x = floor(ra * sin(theta) + XO as f64 + 0.5) as u32;
+    let y = floor(ro - ra * cos(theta) + YO as f64 + 0.5) as u32;
 
     (x, y)
 }
@@ -203,5 +214,5 @@ fn get_base_date() -> Result<(String, String), KmaError> {
             return Ok((base_date, base_time));
         }
     }
-    Err(KmaError::DateCalcError(current))
+    Err(KmaError::DateCalc(current))
 }

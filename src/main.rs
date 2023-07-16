@@ -18,26 +18,22 @@ impl EventHandler for Handler {
     // events can be dispatched simultaneously.
     async fn message(&self, ctx: Context, msg: Message) {
         if msg.content == "!weather" {
-            // Sending a message can fail, due to a network error, an
-            // authentication error, or lack of permissions to post in the
-            // channel, so log to stdout when some error happens, with a
-            // description of it.
-
             let weather_info = kma::func::get_weather().await;
-            if let Err(why) = weather_info {
-                if let Err(why) = msg
-                    .channel_id
-                    .say(
-                        &ctx.http,
-                        format!("Error occured during KMA request: {:?}", why),
-                    )
-                    .await
-                {
-                    println!("Error sending message: {:?}", why);
+            match weather_info {
+                Ok(info) => {
+                    if let Err(why) = msg.channel_id.say(&ctx.http, info).await {
+                        println!("Error sending message: {:?}", why);
+                    }
                 }
-                println!("Error during retrieving weather information: {:?}", why);
-            } else if let Err(why) = msg.channel_id.say(&ctx.http, weather_info.unwrap()).await {
-                println!("Error sending message: {:?}", why);
+                Err(why) => {
+                    if let Err(why) = msg
+                        .channel_id
+                        .say(&ctx.http, format!("Internal error occured: {:?}", why))
+                        .await
+                    {
+                        println!("Error sending message: {:?}", why);
+                    }
+                }
             }
         }
     }
