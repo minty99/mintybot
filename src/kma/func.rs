@@ -91,8 +91,10 @@ async fn query_kma(lat: f64, lng: f64, num_retries: u32) -> Result<KmaResponseFu
 
 async fn _query_kma(lat: f64, lng: f64) -> Result<KmaResponseFull, KmaError> {
     let base_url = "http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst";
-    let service_key =
-        fs::read_to_string(".kma_api_key").expect("Should have been able to read the file");
+    let service_key = fs::read_to_string(".kma_api_key")
+        .expect("Should have been able to read the file")
+        .trim_end()
+        .to_string();
     let page_no = String::from("1");
     let num_of_rows = String::from("200");
     let data_type = String::from("JSON");

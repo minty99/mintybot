@@ -52,8 +52,10 @@ impl EventHandler for Handler {
 #[tokio::main]
 async fn main() {
     // Configure the client with your Discord bot token in the token file.
-    let discord_token =
-        fs::read_to_string(".discord_token").expect("Should have been able to read the file");
+    let discord_token = fs::read_to_string(".discord_token")
+        .expect("Should have been able to read the file")
+        .trim_end()
+        .to_string();
 
     // Set gateway intents, which decides what events the bot will be notified about
     let intents = GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT;
