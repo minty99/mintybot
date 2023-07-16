@@ -71,16 +71,21 @@ async fn query_kma(lat: f32, lng: f32) -> Result<KmaResponseFull, String> {
                 ("nx", &nx.to_string()),
                 ("ny", &ny.to_string()),
             ])
-            .timeout(Duration::from_secs(3)) // Timeout 3s
+            .timeout(Duration::from_secs(3))
             .send()
             .await;
 
         let after = Instant::now();
-        println!("KMA request time: {}ms", (after - before).as_millis());
 
         // TODO more simple implementation using async closures?
         let result = match result {
             Ok(result) => {
+                println!(
+                    "GET {} ({}) [{} ms]",
+                    result.url(),
+                    result.status(),
+                    (after - before).as_millis()
+                );
                 let text_result = result.text().await;
                 match text_result {
                     Ok(text) => {
