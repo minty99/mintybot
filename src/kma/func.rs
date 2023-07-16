@@ -17,7 +17,7 @@ pub enum KmaError {
 
 impl From<reqwest::Error> for KmaError {
     fn from(err: reqwest::Error) -> KmaError {
-        KmaError::Http(err.without_url())
+        KmaError::Http(err.without_url()) // Hide URL (URL has secret keys)
     }
 }
 
@@ -25,7 +25,7 @@ impl Display for KmaError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             KmaError::Http(err) => write!(f, "HttpError: {}", err),
-            KmaError::Json(err, text) => write!(f, "JsonError: {} ({})", err, text),
+            KmaError::Json(err, _text) => write!(f, "JsonError: {}", err), // Hide raw text here
             KmaError::DateCalc(dt) => write!(f, "DateCalcError: {}", dt),
         }
     }
@@ -76,9 +76,13 @@ async fn query_kma(lat: f64, lng: f64, num_retries: u32) -> Result<KmaResponseFu
             Ok(response) => return Ok(response),
             Err(err) => {
                 if i + 1 == num_retries {
+                    println!("query_kma: retry limit reached ({}/{})", i + 1, num_retries);
+                    println!("{:?}", err);
                     return Err(err);
                 }
                 println!("query_kma: retrying ({}/{})", i + 1, num_retries);
+                println!("{:?}", err);
+                tokio::time::sleep(Duration::from_millis(300)).await;
             }
         }
     }
@@ -109,7 +113,7 @@ async fn _query_kma(lat: f64, lng: f64) -> Result<KmaResponseFull, KmaError> {
             ("nx", &nx.to_string()),
             ("ny", &ny.to_string()),
         ])
-        .timeout(Duration::from_secs(3))
+        .timeout(Duration::from_secs(1))
         .send()
         .await?;
 
