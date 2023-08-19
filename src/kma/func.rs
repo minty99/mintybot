@@ -17,6 +17,7 @@ pub enum KmaError {
 
 impl From<reqwest::Error> for KmaError {
     fn from(err: reqwest::Error) -> KmaError {
+        println!("Error on request {}", err.url().unwrap().as_str());
         KmaError::Http(err.without_url()) // Hide URL (URL has secret keys)
     }
 }
@@ -96,7 +97,7 @@ async fn _query_kma(lat: f64, lng: f64) -> Result<KmaResponseFull, KmaError> {
         .trim_end()
         .to_string();
     let page_no = String::from("1");
-    let num_of_rows = String::from("200");
+    let num_of_rows = String::from("150");
     let data_type = String::from("JSON");
     let (base_date, base_time) = get_base_date()?;
     let (nx, ny) = dfs_xy_conv(lat, lng);
@@ -115,7 +116,7 @@ async fn _query_kma(lat: f64, lng: f64) -> Result<KmaResponseFull, KmaError> {
             ("nx", &nx.to_string()),
             ("ny", &ny.to_string()),
         ])
-        .timeout(Duration::from_secs(1))
+        .timeout(Duration::from_secs(3))
         .send()
         .await?;
 
@@ -221,4 +222,16 @@ fn get_base_date() -> Result<(String, String), KmaError> {
         }
     }
     Err(KmaError::DateCalc(current))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_kma_query() {
+        let (lat, lng) = (37.4781098, 126.9489182); // 관악구청
+        let result = _query_kma(lat, lng).await;
+        assert!(result.is_ok());
+    }
 }
