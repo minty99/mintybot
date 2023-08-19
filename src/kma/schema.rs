@@ -3,24 +3,24 @@
 
 use serde::Deserialize;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct KmaResponseFull {
     pub response: KmaResponse,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct KmaResponse {
     header: KmaHeader,
     pub body: KmaBody,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct KmaHeader {
     resultCode: String,
     resultMsg: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct KmaBody {
     dataType: String,
     pub items: KmaItems,
@@ -29,12 +29,12 @@ pub struct KmaBody {
     totalCount: u32,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct KmaItems {
     pub item: Vec<KmaItem>,
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, Debug)]
 pub struct KmaItem {
     pub baseDate: String,
     pub baseTime: String,
