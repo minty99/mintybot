@@ -7,6 +7,7 @@ use serenity::async_trait;
 use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
+use utils::discord;
 
 struct Handler;
 
@@ -18,10 +19,20 @@ impl EventHandler for Handler {
     // Event handlers are dispatched through a threadpool, and so multiple
     // events can be dispatched simultaneously.
     async fn message(&self, ctx: Context, msg: Message) {
-        if msg.content == "!weather" {
+        let content = msg.content;
+        let channel_id = msg.channel_id;
+
+        if content == "!weather" {
             let weather_info = kma::get_weather().await;
             match weather_info {
                 Ok(info) => {
+                    discord::say(&ctx, channel_id, info).await;
+                }
+                Err(why) => {
+                    discord::say(&ctx, channel_id, format!("Internal error occured: {}", why))
+                        .await;
+                }
+            }
                     if let Err(why) = msg.channel_id.say(&ctx.http, info).await {
                         println!("Error sending message: {:?}", why);
                     }

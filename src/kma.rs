@@ -1,38 +1,13 @@
 use chrono::{prelude::*, Days};
 use std::{
     f64::consts::PI,
-    fmt::{self, Display, Formatter},
     fs,
     time::{Duration, Instant},
 };
 
-use crate::utils::kma_schema::KmaResponseFull;
+use crate::utils::kma_types::KmaResponseFull;
 
-#[derive(Debug)]
-pub enum KmaError {
-    Http(reqwest::Error),
-    Json(serde_json::Error, String),
-    DateCalc(DateTime<FixedOffset>),
-}
-
-impl From<reqwest::Error> for KmaError {
-    fn from(err: reqwest::Error) -> KmaError {
-        println!("Error on request {}", err.url().unwrap().as_str());
-        KmaError::Http(err.without_url()) // Hide URL (URL has secret keys)
-    }
-}
-
-impl Display for KmaError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            KmaError::Http(err) => write!(f, "KmaError::Http: {}", err),
-            KmaError::Json(err, _text) => write!(f, "KmaError::Json: {}", err), // Hide raw text here
-            KmaError::DateCalc(dt) => write!(f, "KmaError::DateCalc: {}", dt),
-        }
-    }
-}
-
-pub async fn get_weather() -> Result<String, KmaError> {
+pub async fn get_weather() -> eyre::Result<String> {
     let (lat, lng) = (37.4781098, 126.9489182); // 관악구청
     let response = query_kma(lat, lng, 3).await?;
 
@@ -70,7 +45,7 @@ pub async fn get_weather() -> Result<String, KmaError> {
     ))
 }
 
-async fn query_kma(lat: f64, lng: f64, num_retries: u32) -> Result<KmaResponseFull, KmaError> {
+async fn query_kma(lat: f64, lng: f64, num_retries: u32) -> eyre::Result<KmaResponseFull> {
     for i in 0..num_retries {
         let result = _query_kma(lat, lng).await;
         match result {
@@ -90,7 +65,7 @@ async fn query_kma(lat: f64, lng: f64, num_retries: u32) -> Result<KmaResponseFu
     unreachable!("query_kma: unreachable!")
 }
 
-async fn _query_kma(lat: f64, lng: f64) -> Result<KmaResponseFull, KmaError> {
+async fn _query_kma(lat: f64, lng: f64) -> eyre::Result<KmaResponseFull> {
     let base_url = "http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst";
     let service_key = fs::read_to_string(".kma_api_key")
         .expect("Should have been able to read the file")
@@ -128,7 +103,8 @@ async fn _query_kma(lat: f64, lng: f64) -> Result<KmaResponseFull, KmaError> {
         (after - before).as_millis()
     );
     let text = response.text().await?;
-    serde_json::from_str::<KmaResponseFull>(&text).map_err(|err| KmaError::Json(err, text))
+    let result = serde_json::from_str(&text)?;
+    Ok(result)
 }
 
 /// 위경도 -> 기상청 좌표
@@ -183,7 +159,7 @@ fn dfs_xy_conv(lat: f64, lng: f64) -> (u32, u32) {
     (x, y)
 }
 
-fn get_base_date() -> Result<(String, String), KmaError> {
+fn get_base_date() -> eyre::Result<(String, String)> {
     let tz = FixedOffset::east_opt(9 * 60 * 60).unwrap();
     let current = Local::now().with_timezone(&tz); // ensure UTC+09:00
     let yesterday = current.checked_sub_days(Days::new(1)).unwrap();
@@ -221,7 +197,7 @@ fn get_base_date() -> Result<(String, String), KmaError> {
             return Ok((base_date, base_time));
         }
     }
-    Err(KmaError::DateCalc(current))
+    Err(eyre::eyre!("base date calculation failed: {}", current))
 }
 
 #[cfg(test)]
