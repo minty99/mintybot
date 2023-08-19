@@ -1,15 +1,14 @@
 use chrono::{prelude::*, Days};
 use std::{
     f64::consts::PI,
-    fs,
     time::{Duration, Instant},
 };
 
 use crate::utils::kma_types::KmaResponseFull;
 
-pub async fn get_weather() -> eyre::Result<String> {
+pub async fn get_weather(service_key: &str) -> eyre::Result<String> {
     let (lat, lng) = (37.4781098, 126.9489182); // 관악구청
-    let response = query_kma(lat, lng, 3).await?;
+    let response = query_kma(lat, lng, service_key, 3).await?;
 
     let items = response.response.body.items.item;
     let rain_probs: Vec<String> = items
@@ -45,9 +44,14 @@ pub async fn get_weather() -> eyre::Result<String> {
     ))
 }
 
-async fn query_kma(lat: f64, lng: f64, num_retries: u32) -> eyre::Result<KmaResponseFull> {
+async fn query_kma(
+    lat: f64,
+    lng: f64,
+    service_key: &str,
+    num_retries: u32,
+) -> eyre::Result<KmaResponseFull> {
     for i in 0..num_retries {
-        let result = _query_kma(lat, lng).await;
+        let result = _query_kma(lat, lng, service_key).await;
         match result {
             Ok(response) => return Ok(response),
             Err(err) => {
@@ -65,12 +69,9 @@ async fn query_kma(lat: f64, lng: f64, num_retries: u32) -> eyre::Result<KmaResp
     unreachable!("query_kma: unreachable!")
 }
 
-async fn _query_kma(lat: f64, lng: f64) -> eyre::Result<KmaResponseFull> {
+async fn _query_kma(lat: f64, lng: f64, service_key: &str) -> eyre::Result<KmaResponseFull> {
     let base_url = "http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst";
-    let service_key = fs::read_to_string(".kma_api_key")
-        .expect("Should have been able to read the file")
-        .trim_end()
-        .to_string();
+
     let page_no = String::from("1");
     let num_of_rows = String::from("150");
     let data_type = String::from("JSON");
@@ -82,7 +83,7 @@ async fn _query_kma(lat: f64, lng: f64) -> eyre::Result<KmaResponseFull> {
     let response = client
         .get(base_url)
         .query(&[
-            ("serviceKey", &service_key),
+            ("serviceKey", &service_key.to_string()),
             ("pageNo", &page_no),
             ("numOfRows", &num_of_rows),
             ("dataType", &data_type),
@@ -202,12 +203,22 @@ fn get_base_date() -> eyre::Result<(String, String)> {
 
 #[cfg(test)]
 mod tests {
+    use std::{env, fs};
+
     use super::*;
 
     #[tokio::test]
     async fn test_kma_query() {
+        let kma_service_key = fs::read_to_string(".kma_api_key")
+            .or_else(|_| env::var("MINTYBOT_KMA_SERVICE_KEY"))
+            .expect(
+                "KMA service key should be stored at .kma_api_key or KMA_SERVICE_KEY env variable",
+            )
+            .trim_end()
+            .to_string();
+
         let (lat, lng) = (37.4781098, 126.9489182); // 관악구청
-        let result = _query_kma(lat, lng).await;
+        let result = _query_kma(lat, lng, &kma_service_key).await;
         assert!(result.is_ok());
     }
 }

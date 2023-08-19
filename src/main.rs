@@ -2,7 +2,7 @@ mod kma;
 mod maple;
 mod utils;
 
-use std::fs;
+use std::{env, fs};
 
 use serenity::async_trait;
 use serenity::model::channel::Message;
@@ -10,10 +10,14 @@ use serenity::model::gateway::Ready;
 use serenity::prelude::*;
 use utils::discord;
 
-struct Handler;
+struct MintyBotHandler {
+    #[allow(dead_code)]
+    discord_token: String,
+    kma_service_key: String,
+}
 
 #[async_trait]
-impl EventHandler for Handler {
+impl EventHandler for MintyBotHandler {
     // Set a handler for the `message` event - so that whenever a new message
     // is received - the closure (or function) passed will be called.
     //
@@ -24,7 +28,7 @@ impl EventHandler for Handler {
         let channel_id = msg.channel_id;
 
         if content == "!weather" {
-            let weather_info = kma::get_weather().await;
+            let weather_info = kma::get_weather(&self.kma_service_key).await;
             match weather_info {
                 Ok(info) => {
                     discord::say(&ctx, channel_id, info).await;
@@ -73,7 +77,14 @@ impl EventHandler for Handler {
 async fn main() {
     // Configure the client with your Discord bot token in the token file.
     let discord_token = fs::read_to_string(".discord_token")
-        .expect("Should have been able to read the file")
+        .or_else(|_| env::var("MINTYBOT_DISCORD_TOKEN"))
+        .expect("Discord token should be stored at .discord_token or DISCORD_TOKEN env variable")
+        .trim_end()
+        .to_string();
+
+    let kma_service_key = fs::read_to_string(".kma_api_key")
+        .or_else(|_| env::var("MINTYBOT_KMA_SERVICE_KEY"))
+        .expect("KMA service key should be stored at .kma_api_key or KMA_SERVICE_KEY env variable")
         .trim_end()
         .to_string();
 
@@ -84,7 +95,10 @@ async fn main() {
     // automatically prepend your bot token with "Bot ", which is a requirement
     // by Discord for bot users.
     let mut client = Client::builder(&discord_token, intents)
-        .event_handler(Handler)
+        .event_handler(MintyBotHandler {
+            discord_token,
+            kma_service_key,
+        })
         .await
         .expect("Err creating client");
 
