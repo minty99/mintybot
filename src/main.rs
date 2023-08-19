@@ -1,4 +1,5 @@
 mod kma;
+mod maple;
 mod utils;
 
 use std::fs;
@@ -33,18 +34,25 @@ impl EventHandler for Handler {
                         .await;
                 }
             }
-                    if let Err(why) = msg.channel_id.say(&ctx.http, info).await {
-                        println!("Error sending message: {:?}", why);
-                    }
+        } else if content.starts_with("!m") || content.starts_with("!maple ") {
+            let args = content.split(" ").collect::<Vec<&str>>();
+            if args.len() != 2 {
+                discord::say(
+                    &ctx,
+                    channel_id,
+                    "[!maple 캐릭터이름] 또는 [!m 캐릭터이름] 으로 명령해주세요.",
+                )
+                .await;
+                return;
+            }
+            let character_name = args[1];
+            let maple_user = maple::get_maple_user(character_name).await;
+            match maple_user {
+                Ok(maple_user) => {
+                    discord::say(&ctx, channel_id, maple_user).await;
                 }
                 Err(why) => {
-                    if let Err(why) = msg
-                        .channel_id
-                        .say(&ctx.http, format!("Internal error occured: {}", why))
-                        .await
-                    {
-                        println!("Error sending message: {:?}", why);
-                    }
+                    discord::say(&ctx, channel_id, format!("Internal error occured: {}", why)).await
                 }
             }
         }
