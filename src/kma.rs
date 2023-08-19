@@ -6,7 +6,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use super::schema::KmaResponseFull;
+use crate::utils::kma_schema::KmaResponseFull;
 
 #[derive(Debug)]
 pub enum KmaError {

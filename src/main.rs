@@ -1,4 +1,5 @@
 mod kma;
+mod utils;
 
 use std::fs;
 
@@ -18,7 +19,7 @@ impl EventHandler for Handler {
     // events can be dispatched simultaneously.
     async fn message(&self, ctx: Context, msg: Message) {
         if msg.content == "!weather" {
-            let weather_info = kma::func::get_weather().await;
+            let weather_info = kma::get_weather().await;
             match weather_info {
                 Ok(info) => {
                     if let Err(why) = msg.channel_id.say(&ctx.http, info).await {
