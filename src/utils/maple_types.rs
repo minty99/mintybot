@@ -44,8 +44,8 @@ impl MapleUser {
             &document,
             "#user-profile > section > div.row.row-normal > div.col-lg-8 > div > h3 > b",
         );
-        let job = from_selector(&document, "#user-profile > section > div.row.row-normal > div.col-lg-8 > div > div.user-summary > ul > li:nth-child(2)");
-        let character_level = from_selector(&document, "#user-profile > section > div.row.row-normal > div.col-lg-8 > div > div.user-summary > ul > li:nth-child(1)");
+        let job = from_selector(&document, "#user-profile > section > div.row.row-normal > div.col-lg-8 > div > div.user-summary > ul > li:nth-child(3)");
+        let character_level = from_selector(&document, "#user-profile > section > div.row.row-normal > div.col-lg-8 > div > div.user-summary > ul > li:nth-child(2)");
         let union_level = from_selector(&document, "#app > div.card.border-bottom-0 > div > section > div.row.text-center > div:nth-child(3) > section > div > div > span");
         let mureung_score = from_selector(&document, "#app > div.card.border-bottom-0 > div > section > div.row.text-center > div:nth-child(1) > section > div > div.pt-4.pt-sm-3.pb-4 > div > h1").replace(" ", "");
 
