@@ -32,7 +32,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_maple_user() {
-        let name = String::from("숍하이퍼");
+        let name = String::from("인피민티");
         let result = get_maple_user(&name).await;
         println!("{:?}", result);
     }
