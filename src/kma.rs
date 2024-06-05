@@ -169,7 +169,7 @@ fn get_base_date() -> eyre::Result<(String, String)> {
 
     // 단기예보 base_time: 0200, 0500, 0800, 1100, 1400, 1700, 2000, 2300
     // 각 base_time 기준으로 10분 이상 지난 것들 중 가장 최근인 것 선택
-    let base_time_hour_candidates = vec![2, 5, 8, 11, 14, 17, 20, 23];
+    let base_time_hour_candidates = [2, 5, 8, 11, 14, 17, 20, 23];
     let today_candidates = base_time_hour_candidates.iter().rev().map(|&hour| {
         current
             .with_hour(hour)

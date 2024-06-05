@@ -39,7 +39,7 @@ impl EventHandler for MintyBotHandler {
                 }
             }
         } else if content.starts_with("!m") || content.starts_with("!maple ") {
-            let args = content.split(" ").collect::<Vec<&str>>();
+            let args = content.split(' ').collect::<Vec<&str>>();
             if args.len() != 2 {
                 discord::say(
                     &ctx,

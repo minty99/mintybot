@@ -6,7 +6,7 @@ use scraper::{Html, Selector};
 fn from_selector(document: &Html, selector_string: &str) -> String {
     fn query(document: &Html, selector_string: &str) -> eyre::Result<String> {
         let selector =
-            Selector::parse(&selector_string).map_err(|_| eyre::eyre!("Selector parsing error"))?;
+            Selector::parse(selector_string).map_err(|_| eyre::eyre!("Selector parsing error"))?;
 
         let result = document
             .select(&selector)
@@ -14,8 +14,7 @@ fn from_selector(document: &Html, selector_string: &str) -> String {
             .collect::<Vec<_>>()
             .first()
             .ok_or_else(|| eyre::eyre!("Nothing matches with given selector"))?
-            .replace("\n", "")
-            .replace("\t", "")
+            .replace(['\n', '\t'], "")
             .trim()
             .to_string();
 
@@ -47,7 +46,7 @@ impl MapleUser {
         let job = from_selector(&document, "#user-profile > section > div.row.row-normal > div.col-lg-8 > div > div.user-summary > ul > li:nth-child(3)");
         let character_level = from_selector(&document, "#user-profile > section > div.row.row-normal > div.col-lg-8 > div > div.user-summary > ul > li:nth-child(2)");
         let union_level = from_selector(&document, "#app > div.card.border-bottom-0 > div > section > div.row.text-center > div:nth-child(3) > section > div > div > span");
-        let mureung_score = from_selector(&document, "#app > div.card.border-bottom-0 > div > section > div.row.text-center > div:nth-child(1) > section > div > div.pt-4.pt-sm-3.pb-4 > div > h1").replace(" ", "");
+        let mureung_score = from_selector(&document, "#app > div.card.border-bottom-0 > div > section > div.row.text-center > div:nth-child(1) > section > div > div.pt-4.pt-sm-3.pb-4 > div > h1").replace(' ', "");
         let mureung_date = from_selector(&document, "#app > div.card.border-bottom-0 > div > section > div.row.text-center > div:nth-child(1) > section > footer > div.user-summary-date > span").replace("  ", " ");
 
         let mureung_score = if mureung_date.contains("기준일") {
