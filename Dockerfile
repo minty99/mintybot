@@ -1,5 +1,7 @@
 FROM rustlang/rust:nightly as builder
 
+RUN rustup toolchain install nightly-2025-04-24
+
 WORKDIR /app
 COPY . .
 
@@ -20,7 +22,7 @@ WORKDIR /app
 # Copy the built binary from the builder stage
 COPY --from=builder /app/target/release/mintybot /app/mintybot
 
-# Set environment variables (will be overridden by docker-compose)
+# Set environment variables (should be overridden by docker-compose)
 ENV MINTYBOT_DISCORD_TOKEN=""
 ENV MINTYBOT_OPENAI_TOKEN=""
 ENV MINTYBOT_DEV_USER_ID=""
