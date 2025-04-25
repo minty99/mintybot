@@ -10,6 +10,4 @@ target/
 *.pdb
 
 # Secrets
-.discord_token
-.dev_user_id
-.openai_token
+.env

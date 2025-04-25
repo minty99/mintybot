@@ -1,0 +1,14 @@
+services:
+  mintybot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mintybot
+    restart: unless-stopped
+    environment:
+      - MINTYBOT_DISCORD_TOKEN=${MINTYBOT_DISCORD_TOKEN}
+      - MINTYBOT_OPENAI_TOKEN=${MINTYBOT_OPENAI_TOKEN}
+      - MINTYBOT_DEV_USER_ID=${MINTYBOT_DEV_USER_ID}
+    volumes:
+      # 로그 디렉토리 마운트 (향후 파일 로깅 추가 시 사용)
+      - ./logs:/app/logs
