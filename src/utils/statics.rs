@@ -23,4 +23,14 @@ lazy_static! {
             .trim_end()
             .to_string()
     );
+    
+    pub static ref OPENAI_TOKEN: Arc<String> = Arc::new(
+        fs::read_to_string(".openai_token")
+            .or_else(|_| env::var("MINTYBOT_OPENAI_TOKEN"))
+            .expect(
+                "OpenAI token should be stored at .openai_token or MINTYBOT_OPENAI_TOKEN env variable"
+            )
+            .trim_end()
+            .to_string()
+    );
 }

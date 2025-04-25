@@ -12,3 +12,4 @@ target/
 # Secrets
 .discord_token
 .dev_user_id
+.openai_token

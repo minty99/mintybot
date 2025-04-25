@@ -2,15 +2,14 @@
 
 mod utils;
 
+use serenity::{async_trait, model::channel::Message, model::gateway::Ready, prelude::*};
 use std::future::Future;
 use std::sync::Arc;
-use std::time::Duration;
+use tokio::time::{sleep, Duration};
 
-use serenity::async_trait;
-use serenity::model::channel::Message;
-use serenity::model::gateway::Ready;
-use serenity::prelude::*;
-use utils::discord::{self, send_dm_to_dev};
+use utils::conversation::add_user_message;
+use utils::discord;
+use utils::openai::get_chatgpt_response;
 use utils::statics::DISCORD_TOKEN;
 
 struct MintyBotHandler {}
@@ -23,19 +22,53 @@ impl EventHandler for MintyBotHandler {
     // Event handlers are dispatched through a threadpool, and so multiple
     // events can be dispatched simultaneously.
     async fn message(&self, ctx: Context, msg: Message) {
-        let content = msg.content;
+        let content = msg.content.clone();
         let channel_id = msg.channel_id;
         let _guild_id = msg.guild_id;
 
-        if content == "!weather" {
-            let weather_info = kma::get_weather().await;
-            match weather_info {
-                Ok(info) => {
-                    discord::say(&ctx, channel_id, info).await;
+        // Check if the bot is mentioned in the message (either through Discord mentions or text mentions)
+        let is_mentioned = msg.mentions_me(&ctx.http).await.unwrap_or(false);
+        let bot_username = ctx.http.get_current_user().await.unwrap().name;
+        let bot_user_id = ctx.http.get_current_user().await.unwrap().id;
+        let contains_text_mention = content.contains(&format!("@{bot_username}"));
+
+        if (is_mentioned || contains_text_mention) && !msg.author.bot {
+            // Extract the message content without the mention
+            let content_without_mention = content
+                .replace(&format!("<@{bot_user_id}>"), "")
+                .replace(&format!("@{bot_username}"), "")
+                .trim()
+                .to_string();
+
+            // Send a typing indicator while processing
+            let _ = channel_id.broadcast_typing(&ctx.http).await;
+
+            // Log the received message
+            tracing::info!("Received mention with message: {}", content_without_mention);
+
+            // Add the user's message to the conversation history
+            add_user_message(channel_id, content_without_mention.clone()).await;
+
+            // Send the message to ChatGPT
+            match get_chatgpt_response(channel_id).await {
+                Ok(response) => {
+                    // Send the response back to Discord
+                    if let Err(why) = discord::say(&ctx, channel_id, &response).await {
+                        tracing::error!("Error sending ChatGPT response: {:?}", why);
+                    }
                 }
-                Err(why) => {
-                    discord::say(&ctx, channel_id, "Internal error occured.".to_string()).await;
-                    tracing::error!("Error getting weather: {:?}", why);
+                Err(err) => {
+                    tracing::error!("Error getting ChatGPT response: {:?}", err);
+                    // Send an error message to the channel
+                    if let Err(why) = discord::say(
+                        &ctx,
+                        channel_id,
+                        format!("Sorry, I couldn't get a response from ChatGPT at the moment. Error: {err}"),
+                    )
+                    .await
+                    {
+                        tracing::error!("Error sending error message: {:?}", why);
+                    }
                 }
             }
         }
@@ -51,7 +84,7 @@ impl EventHandler for MintyBotHandler {
     async fn ready(&self, ctx: Context, ready: Ready) {
         tracing::info!("{} is connected!", ready.user.name);
 
-        send_dm_to_dev(&ctx, &format!("{} started.", ready.user.name))
+        discord::send_dm_to_dev(&ctx, &format!("{} started.", ready.user.name))
             .await
             .ok();
 
@@ -79,7 +112,7 @@ where
                     tracing::warn!("Error: {:?}", err);
                 }
             }
-            tokio::time::sleep(Duration::from_secs(period)).await;
+            sleep(Duration::from_secs(period)).await;
         }
     });
 }

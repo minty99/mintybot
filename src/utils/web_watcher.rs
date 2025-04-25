@@ -27,7 +27,7 @@ where
     {
         tracing::trace!("Changes detected: {:?}", curr);
         let mut msg = String::new();
-        msg.push_str(&format!("Changes detected: {:?}\n", curr));
+        msg.push_str(&format!("Changes detected: {curr:?}\n"));
         send_dm_to_dev(&ctx, &msg).await?;
     }
 
