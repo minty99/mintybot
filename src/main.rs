@@ -2,6 +2,7 @@
 
 mod utils;
 
+use serenity::model::id::{ChannelId, UserId};
 use serenity::model::user::CurrentUser;
 use serenity::{async_trait, model::channel::Message, model::gateway::Ready, prelude::*};
 use std::future::Future;
@@ -33,6 +34,53 @@ fn handle_bot_mentions(content: &str, bot_user: CurrentUser) -> (bool, String) {
     (contains_mention, content_without_mention)
 }
 
+/// Handles the forget command from authorized users
+async fn handle_forget_command(ctx: &Context, channel_id: ChannelId, author_id: UserId) {
+    if author_id == **DEV_USER_ID {
+        // Clear conversation history for this channel
+        clear_conversation_history(channel_id).await;
+
+        // Send confirmation message
+        if let Err(why) =
+            discord::say(ctx, channel_id, "Conversation history has been cleared.").await
+        {
+            tracing::error!("Error sending confirmation message: {:?}", why);
+        }
+    } else {
+        // Send warning message to non-developer users
+        if let Err(why) = discord::say(ctx, channel_id, "You are not admin. Request denied.").await
+        {
+            tracing::error!("Error sending warning message: {:?}", why);
+        }
+    }
+}
+
+/// Process a message that mentions the bot and send a response
+async fn process_bot_mention(ctx: &Context, channel_id: ChannelId, content: String) {
+    // Add the user's message to the conversation history
+    add_user_message(channel_id, content.clone()).await;
+
+    // Send the message to ChatGPT and handle the response
+    match get_chatgpt_response(channel_id).await {
+        Ok(response) => {
+            // Send the response back to Discord
+            if let Err(why) = discord::say(ctx, channel_id, &response).await {
+                tracing::error!("Error sending ChatGPT response: {:?}", why);
+            }
+        }
+        Err(err) => {
+            tracing::error!("Error getting ChatGPT response: {:?}", err);
+            // Send an error message to the channel
+            let error_message = format!(
+                "Sorry, I couldn't get a response from ChatGPT at the moment. Error: {err}"
+            );
+            if let Err(why) = discord::say(ctx, channel_id, error_message).await {
+                tracing::error!("Error sending error message: {:?}", why);
+            }
+        }
+    }
+}
+
 struct MintyBotHandler {}
 
 #[async_trait]
@@ -45,71 +93,35 @@ impl EventHandler for MintyBotHandler {
     async fn message(&self, ctx: Context, msg: Message) {
         let content = msg.content.clone();
         let channel_id = msg.channel_id;
-        let _guild_id = msg.guild_id;
+        let author = msg.author.clone();
 
-        // Check if the bot is mentioned in the message (either through Discord mentions or text mentions)
+        // Skip messages from bots
+        if author.bot {
+            return;
+        }
+
+        tracing::debug!("Text: {}", content);
+
+        // Check if the bot is mentioned in the message
         let is_mentioned = msg.mentions_me(&ctx.http).await.unwrap_or(false);
-        tracing::info!("Text: {}", content);
-
         let (contains_text_mention, content_without_mention) =
             handle_bot_mentions(&content, ctx.http.get_current_user().await.unwrap());
 
-        if (is_mentioned || contains_text_mention) && !msg.author.bot {
+        if is_mentioned || contains_text_mention {
             // Send a typing indicator while processing
             let _ = channel_id.broadcast_typing(&ctx.http).await;
 
             // Check if this is a forget command
             if content_without_mention.trim() == "<forget>" {
-                if msg.author.id == **DEV_USER_ID {
-                    // Clear conversation history for this channel
-                    clear_conversation_history(channel_id).await;
-
-                    // Send confirmation message
-                    if let Err(why) =
-                        discord::say(&ctx, channel_id, "Conversation history has been cleared.")
-                            .await
-                    {
-                        tracing::error!("Error sending confirmation message: {:?}", why);
-                    }
-                } else {
-                    // Send warning message to non-developer users
-                    if let Err(why) =
-                        discord::say(&ctx, channel_id, "You are not admin. Request denied.").await
-                    {
-                        tracing::error!("Error sending warning message: {:?}", why);
-                    }
-                }
+                handle_forget_command(&ctx, channel_id, author.id).await;
                 return;
             }
 
             // Log the received message
             tracing::info!("Received mention with message: {}", content_without_mention);
 
-            // Add the user's message to the conversation history
-            add_user_message(channel_id, content_without_mention.clone()).await;
-
-            // Send the message to ChatGPT
-            match get_chatgpt_response(channel_id).await {
-                Ok(response) => {
-                    // Send the response back to Discord
-                    if let Err(why) = discord::say(&ctx, channel_id, &response).await {
-                        tracing::error!("Error sending ChatGPT response: {:?}", why);
-                    }
-                }
-                Err(err) => {
-                    tracing::error!("Error getting ChatGPT response: {:?}", err);
-                    // Send an error message to the channel
-                    if let Err(why) = discord::say(
-                        &ctx,
-                        channel_id,
-                        format!("Sorry, I couldn't get a response from ChatGPT at the moment. Error: {err}"),
-                    )
-                    .await
-                    {
-                        tracing::error!("Error sending error message: {:?}", why);
-                    }
-                }
-            }
+            // Process the mention and send a response
+            process_bot_mention(&ctx, channel_id, content_without_mention).await;
         }
     }
 
@@ -121,15 +133,30 @@ impl EventHandler for MintyBotHandler {
     // In this case, just print what the current user's username is.
     #[allow(unused_variables)]
     async fn ready(&self, ctx: Context, ready: Ready) {
-        tracing::info!("{} is connected!", ready.user.name);
+        let bot_name = ready.user.name.clone();
+        tracing::info!("{} is connected!", bot_name);
 
-        discord::send_dm_to_dev(&ctx, &format!("{} started.", ready.user.name))
-            .await
-            .ok();
+        // Notify developer that the bot has started
+        notify_bot_startup(&ctx, &bot_name).await;
 
-        // Spawn a background task to run the job every hour
-        // For example, use web_watcher::watch_web_site to watch a website
+        // Here you could spawn background tasks if needed
+        // spawn_periodic_tasks(Arc::new(ctx));
     }
+}
+
+/// Notify the developer that the bot has started
+async fn notify_bot_startup(ctx: &Context, bot_name: &str) {
+    let startup_message = format!("{bot_name} started.");
+    if let Err(err) = discord::send_dm_to_dev(ctx, &startup_message).await {
+        tracing::error!("Failed to send startup notification: {:?}", err);
+    }
+}
+
+/// Spawn periodic background tasks
+#[allow(dead_code)]
+fn spawn_periodic_tasks(_ctx: Arc<Context>) {
+    // Example: spawn a web watcher task
+    // spawn_periodic_task(ctx, web_watcher::watch_website, 3600);
 }
 
 #[allow(dead_code)]
@@ -157,24 +184,29 @@ where
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> eyre::Result<()> {
+    // Initialize the tracing subscriber for logging
     tracing_subscriber::fmt::init();
+
     // Set gateway intents, which decides what events the bot will be notified about
     let intents = GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT;
 
-    // Create a new instance of the Client, logging in as a bot. This will
-    // automatically prepend your bot token with "Bot ", which is a requirement
-    // by Discord for bot users.
-    let mut client = Client::builder(&**DISCORD_TOKEN, intents)
-        .event_handler(MintyBotHandler {})
-        .await
-        .expect("Err creating client");
+    // Create a new instance of the Client, logging in as a bot
+    let mut client = create_discord_client(intents).await?;
 
-    // Finally, start a single shard, and start listening to events.
-    //
-    // Shards will automatically attempt to reconnect, and will perform
-    // exponential backoff until it reconnects.
+    // Start the client and handle any errors
     if let Err(why) = client.start().await {
         tracing::error!("Client error: {:?}", why);
+        return Err(eyre::eyre!("Client error: {:?}", why));
     }
+
+    Ok(())
+}
+
+/// Create and configure the Discord client
+async fn create_discord_client(intents: GatewayIntents) -> eyre::Result<Client> {
+    Client::builder(&**DISCORD_TOKEN, intents)
+        .event_handler(MintyBotHandler {})
+        .await
+        .map_err(|e| eyre::eyre!("Failed to create Discord client: {}", e))
 }
