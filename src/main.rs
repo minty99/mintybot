@@ -2,6 +2,7 @@
 
 mod utils;
 
+use serenity::model::user::CurrentUser;
 use serenity::{async_trait, model::channel::Message, model::gateway::Ready, prelude::*};
 use std::future::Future;
 use std::sync::Arc;
@@ -11,6 +12,24 @@ use utils::conversation::add_user_message;
 use utils::discord;
 use utils::openai::get_chatgpt_response;
 use utils::statics::DISCORD_TOKEN;
+
+/// Handles bot mention detection and content processing
+fn handle_bot_mentions(content: &str, bot_user: CurrentUser) -> (bool, String) {
+    let bot_user_id = bot_user.id;
+    let bot_username = bot_user.name;
+    let regular_mention = format!("<@{bot_user_id}>");
+    let text_mention = format!("@{bot_username}");
+
+    let contains_mention = content.contains(&regular_mention) || content.contains(&text_mention);
+
+    let content_without_mention = content
+        .replace(&regular_mention, "") // regular discord mention
+        .replace(&text_mention, "") // text mention with username
+        .trim()
+        .to_string();
+
+    (contains_mention, content_without_mention)
+}
 
 struct MintyBotHandler {}
 
@@ -28,18 +47,12 @@ impl EventHandler for MintyBotHandler {
 
         // Check if the bot is mentioned in the message (either through Discord mentions or text mentions)
         let is_mentioned = msg.mentions_me(&ctx.http).await.unwrap_or(false);
-        let bot_username = ctx.http.get_current_user().await.unwrap().name;
-        let bot_user_id = ctx.http.get_current_user().await.unwrap().id;
-        let contains_text_mention = content.contains(&format!("@{bot_username}"));
+        tracing::info!("Text: {}", content);
+
+        let (contains_text_mention, content_without_mention) =
+            handle_bot_mentions(&content, ctx.http.get_current_user().await.unwrap());
 
         if (is_mentioned || contains_text_mention) && !msg.author.bot {
-            // Extract the message content without the mention
-            let content_without_mention = content
-                .replace(&format!("<@{bot_user_id}>"), "")
-                .replace(&format!("@{bot_username}"), "")
-                .trim()
-                .to_string();
-
             // Send a typing indicator while processing
             let _ = channel_id.broadcast_typing(&ctx.http).await;
 
