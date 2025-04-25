@@ -82,7 +82,6 @@ impl ConversationHistory {
     }
 
     // Clear the conversation history for a specific channel
-    #[allow(dead_code)]
     pub fn clear_history(&mut self, channel_id: ChannelId) {
         self.conversations.remove(&channel_id);
     }
@@ -110,7 +109,6 @@ pub async fn get_conversation_history(channel_id: ChannelId) -> Vec<Conversation
     manager.get_history(channel_id)
 }
 
-#[allow(dead_code)]
 pub async fn clear_conversation_history(channel_id: ChannelId) {
     let mut manager = CONVERSATION_MANAGER.lock().await;
     manager.clear_history(channel_id);

@@ -9,8 +9,10 @@ use std::sync::Arc;
 use tokio::time::{sleep, Duration};
 
 use utils::conversation::add_user_message;
+use utils::conversation::clear_conversation_history;
 use utils::discord;
 use utils::openai::get_chatgpt_response;
+use utils::statics::DEV_USER_ID;
 use utils::statics::DISCORD_TOKEN;
 
 /// Handles bot mention detection and content processing
@@ -55,6 +57,30 @@ impl EventHandler for MintyBotHandler {
         if (is_mentioned || contains_text_mention) && !msg.author.bot {
             // Send a typing indicator while processing
             let _ = channel_id.broadcast_typing(&ctx.http).await;
+
+            // Check if this is a forget command
+            if content_without_mention.trim() == "<forget>" {
+                if msg.author.id == **DEV_USER_ID {
+                    // Clear conversation history for this channel
+                    clear_conversation_history(channel_id).await;
+
+                    // Send confirmation message
+                    if let Err(why) =
+                        discord::say(&ctx, channel_id, "Conversation history has been cleared.")
+                            .await
+                    {
+                        tracing::error!("Error sending confirmation message: {:?}", why);
+                    }
+                } else {
+                    // Send warning message to non-developer users
+                    if let Err(why) =
+                        discord::say(&ctx, channel_id, "You are not admin. Request denied.").await
+                    {
+                        tracing::error!("Error sending warning message: {:?}", why);
+                    }
+                }
+                return;
+            }
 
             // Log the received message
             tracing::info!("Received mention with message: {}", content_without_mention);
