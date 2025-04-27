@@ -1,6 +1,9 @@
+use lazy_static::lazy_static;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serenity::model::id::ChannelId;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 use crate::utils::conversation::{
     add_assistant_message, get_conversation_history, ConversationMessage,
@@ -10,6 +13,11 @@ use crate::utils::statics::OPENAI_TOKEN;
 // Model constants
 const DEFAULT_MODEL: &str = "gpt-4.1-mini";
 const DEFAULT_TEMPERATURE: f32 = 0.7;
+
+// Global model name that can be changed
+lazy_static! {
+    static ref CURRENT_MODEL: Arc<Mutex<String>> = Arc::new(Mutex::new(DEFAULT_MODEL.to_string()));
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct ChatMessage {
@@ -34,9 +42,10 @@ struct ChatCompletionRequest {
 }
 
 impl ChatCompletionRequest {
-    fn new(messages: Vec<ChatMessage>) -> Self {
+    async fn new(messages: Vec<ChatMessage>) -> Self {
+        let model = CURRENT_MODEL.lock().await.clone();
         Self {
-            model: DEFAULT_MODEL.to_string(),
+            model,
             messages,
             temperature: DEFAULT_TEMPERATURE,
         }
@@ -73,7 +82,7 @@ pub async fn get_chatgpt_response(channel_id: ChannelId) -> eyre::Result<String>
 /// Send a chat completion request to the OpenAI API
 async fn send_chat_completion_request(messages: Vec<ChatMessage>) -> eyre::Result<String> {
     let client = Client::new();
-    let request = ChatCompletionRequest::new(messages);
+    let request = ChatCompletionRequest::new(messages).await;
 
     let response = client
         .post("https://api.openai.com/v1/chat/completions")
@@ -100,4 +109,19 @@ async fn process_openai_response(response: reqwest::Response) -> eyre::Result<St
         .first()
         .map(|choice| choice.message.content.clone())
         .ok_or_else(|| eyre::eyre!("No response from ChatGPT"))
+}
+
+/// Change the model used for ChatGPT requests
+pub async fn change_model(model_name: &str) -> String {
+    let mut current_model = CURRENT_MODEL.lock().await;
+    let old_model = current_model.clone();
+    *current_model = model_name.to_string();
+
+    format!("Model changed from {old_model} to {model_name}")
+}
+
+/// Get the current model name
+#[expect(dead_code)]
+pub async fn get_current_model() -> String {
+    CURRENT_MODEL.lock().await.clone()
 }

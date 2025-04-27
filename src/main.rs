@@ -55,6 +55,28 @@ async fn handle_forget_command(ctx: &Context, channel_id: ChannelId, author_id: 
     }
 }
 
+/// Handles the model change command from authorized users
+async fn handle_model_command(
+    ctx: &Context,
+    channel_id: ChannelId,
+    author_id: UserId,
+    model_name: &str,
+) {
+    // Only allow the developer to change the model
+    if author_id != **utils::statics::DEV_USER_ID {
+        let _ = channel_id
+            .say(&ctx.http, "You are not admin. Request denied.")
+            .await;
+        return;
+    }
+
+    // Change the model and get the response
+    let response = utils::openai::change_model(model_name).await;
+
+    // Send the response
+    let _ = channel_id.say(&ctx.http, response).await;
+}
+
 /// Process a message that mentions the bot and send a response
 async fn process_bot_mention(ctx: &Context, channel_id: ChannelId, content: String) {
     // Add the user's message to the conversation history
@@ -115,6 +137,15 @@ impl EventHandler for MintyBotHandler {
             if content_without_mention.trim() == "<forget>" {
                 handle_forget_command(&ctx, channel_id, author.id).await;
                 return;
+            }
+
+            // Check if this is a model change command
+            if let Some(model_name) = content_without_mention.trim().strip_prefix("<model>") {
+                let model_name = model_name.trim();
+                if !model_name.is_empty() {
+                    handle_model_command(&ctx, channel_id, author.id, model_name).await;
+                    return;
+                }
             }
 
             // Log the received message
