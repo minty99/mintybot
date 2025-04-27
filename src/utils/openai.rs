@@ -11,7 +11,7 @@ use crate::utils::conversation::{
 use crate::utils::statics::OPENAI_TOKEN;
 
 // Model constants
-const DEFAULT_MODEL: &str = "gpt-4.1-mini";
+const DEFAULT_MODEL: &str = "gpt-4.1";
 const DEFAULT_TEMPERATURE: f32 = 0.7;
 
 // Global model name that can be changed
