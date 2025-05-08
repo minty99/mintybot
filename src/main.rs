@@ -18,7 +18,7 @@ use utils::statics::DISCORD_TOKEN;
 /// Handles bot mention detection and content processing
 async fn handle_bot_mentions(ctx: &Context, msg: &Message) -> (bool, String) {
     let mintybot_role_id = if let Some(guild_id) = msg.guild_id {
-        let roles = ctx.http.get_guild_roles(guild_id.0).await.unwrap();
+        let roles = ctx.http.get_guild_roles(guild_id).await.unwrap();
         roles
             .iter()
             .find(|role| role.name == "MintyBot")

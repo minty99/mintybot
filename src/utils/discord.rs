@@ -1,4 +1,4 @@
-use serenity::{model::prelude::ChannelId, prelude::Context};
+use serenity::{all::CreateMessage, model::prelude::ChannelId, prelude::Context};
 
 use super::statics::DEV_USER_ID;
 
@@ -93,7 +93,8 @@ fn find_safe_boundary(text: &str, pos: usize) -> usize {
 /// Send a direct message to the developer
 pub async fn send_dm_to_dev(ctx: &Context, msg: &str) -> eyre::Result<()> {
     if let Ok(user) = DEV_USER_ID.to_user(&ctx.http).await {
-        user.dm(&ctx.http, |m| m.content(msg))
+        let message = CreateMessage::new().content(msg);
+        user.dm(&ctx.http, message)
             .await
             .map_err(|e| eyre::eyre!("{}", e))?;
     }
