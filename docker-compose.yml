@@ -9,6 +9,7 @@ services:
       - MINTYBOT_DISCORD_TOKEN=${MINTYBOT_DISCORD_TOKEN}
       - MINTYBOT_OPENAI_TOKEN=${MINTYBOT_OPENAI_TOKEN}
       - MINTYBOT_DEV_USER_ID=${MINTYBOT_DEV_USER_ID}
+      - RUST_LOG=info,mintybot=debug
     volumes:
       # 로그 디렉토리 마운트 (향후 파일 로깅 추가 시 사용)
       - ./logs:/app/logs
