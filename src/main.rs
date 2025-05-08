@@ -3,7 +3,6 @@
 mod utils;
 
 use serenity::model::id::{ChannelId, UserId};
-use serenity::model::user::CurrentUser;
 use serenity::{async_trait, model::channel::Message, model::gateway::Ready, prelude::*};
 use std::future::Future;
 use std::sync::Arc;
@@ -17,21 +16,39 @@ use utils::statics::DEV_USER_ID;
 use utils::statics::DISCORD_TOKEN;
 
 /// Handles bot mention detection and content processing
-fn handle_bot_mentions(content: &str, bot_user: CurrentUser) -> (bool, String) {
-    let bot_user_id = bot_user.id;
-    let bot_username = bot_user.name;
-    let regular_mention = format!("<@{bot_user_id}>");
-    let text_mention = format!("@{bot_username}");
-    let role_mention = "@MintyBot"; // Role mention
+async fn handle_bot_mentions(ctx: &Context, msg: &Message) -> (bool, String) {
+    let mintybot_role_id = if let Some(guild_id) = msg.guild_id {
+        let roles = ctx.http.get_guild_roles(guild_id.0).await.unwrap();
+        roles
+            .iter()
+            .find(|role| role.name == "MintyBot")
+            .map(|role| role.id)
+    } else {
+        None
+    };
 
-    let contains_mention = content.contains(&regular_mention)
-        || content.contains(&text_mention)
-        || content.contains(role_mention);
+    let role_mentioned = if let Some(mintybot_role_id) = mintybot_role_id {
+        msg.mention_roles.contains(&mintybot_role_id)
+    } else {
+        false
+    };
 
-    let content_without_mention = content
+    let regular_mentioned = msg.mentions_me(&ctx.http).await.unwrap_or(false);
+
+    let bot_user = ctx.http.get_current_user().await.unwrap();
+
+    let regular_mention = format!("<@{}>", bot_user.id);
+    let role_mention = mintybot_role_id
+        .map(|id| format!("<@&{id}>"))
+        .unwrap_or_default();
+
+    let contains_mention = regular_mentioned || role_mentioned;
+
+    let content_without_mention = msg
+        .content
+        .clone()
         .replace(&regular_mention, "") // regular discord mention
-        .replace(&text_mention, "") // text mention with username
-        .replace(role_mention, "") // role mention
+        .replace(&role_mention, "") // role mention
         .trim()
         .to_string();
 
@@ -170,21 +187,20 @@ impl EventHandler for MintyBotHandler {
     // Event handlers are dispatched through a threadpool, and so multiple
     // events can be dispatched simultaneously.
     async fn message(&self, ctx: Context, msg: Message) {
-        let content = msg.content.clone();
         let channel_id = msg.channel_id;
         let author = msg.author.clone();
+
+        tracing::debug!("Text: {:?}", msg);
 
         // Skip messages from bots
         if author.bot {
             return;
         }
 
-        tracing::debug!("Text: {}", content);
-
         // Check if the bot is mentioned in the message
         let is_mentioned = msg.mentions_me(&ctx.http).await.unwrap_or(false);
         let (contains_text_mention, content_without_mention) =
-            handle_bot_mentions(&content, ctx.http.get_current_user().await.unwrap());
+            handle_bot_mentions(&ctx, &msg).await;
 
         if is_mentioned || contains_text_mention {
             // Send a typing indicator while processing
