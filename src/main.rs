@@ -24,7 +24,7 @@ fn handle_bot_mentions(content: &str, bot_user: CurrentUser) -> (bool, String) {
     let text_mention = format!("@{bot_username}");
     let role_mention = "@MintyBot"; // Role mention
 
-    let contains_mention = content.contains(&regular_mention) 
+    let contains_mention = content.contains(&regular_mention)
         || content.contains(&text_mention)
         || content.contains(role_mention);
 
@@ -71,7 +71,7 @@ async fn handle_model_command(
             .await;
         return;
     }
-    
+
     // Trim the model name and check if it's empty
     let model_name = model_name.trim();
     if model_name.is_empty() {
@@ -102,7 +102,7 @@ async fn handle_dev_command(
             .await;
         return;
     }
-    
+
     // Trim the developer message and check if it's empty
     let dev_message = dev_message.trim();
     if dev_message.is_empty() {
