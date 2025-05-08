@@ -185,6 +185,7 @@ impl EventHandler for MintyBotHandler {
     // events can be dispatched simultaneously.
     async fn message(&self, ctx: Context, msg: Message) {
         let channel_id = msg.channel_id;
+        let guild_id = msg.guild_id;
         let author = msg.author.clone();
 
         tracing::debug!("Text: {:?}", msg);
@@ -224,11 +225,18 @@ impl EventHandler for MintyBotHandler {
             // Log the received message
             tracing::info!("Received mention with message: {}", content_without_mention);
 
-            // Get the name of the message author
-            let name = Some(author.name.clone());
+            // Get the name of the message author. If the message is from a guild, prefer to use the nickname.
+            let name = if let Some(guild_id) = guild_id {
+                author
+                    .nick_in(&ctx.http, guild_id)
+                    .await
+                    .unwrap_or(author.name.clone())
+            } else {
+                author.name.clone()
+            };
 
             // Process the mention and send a response
-            process_bot_mention(&ctx, channel_id, content_without_mention, name).await;
+            process_bot_mention(&ctx, channel_id, content_without_mention, Some(name)).await;
         }
     }
 
