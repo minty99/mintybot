@@ -9,10 +9,10 @@ use std::future::Future;
 use std::sync::Arc;
 use tokio::time::{Duration, sleep};
 
-use utils::conversation::add_user_message;
-use utils::conversation::clear_conversation_history;
+use utils::conversation::{CONVERSATION_MANAGER, clear_conversation_history};
+use utils::conversation::{ConversationMessage, add_user_message};
 use utils::discord;
-use utils::openai::get_chatgpt_response;
+use utils::openai::{change_model, get_chatgpt_response};
 use utils::statics::DEV_USER_ID;
 use utils::statics::DISCORD_TOKEN;
 
@@ -36,22 +36,20 @@ fn handle_bot_mentions(content: &str, bot_user: CurrentUser) -> (bool, String) {
 
 /// Handles the forget command from authorized users
 async fn handle_forget_command(ctx: &Context, channel_id: ChannelId, author_id: UserId) {
-    if author_id == **DEV_USER_ID {
-        // Clear conversation history for this channel
-        clear_conversation_history(channel_id).await;
+    if author_id != **DEV_USER_ID {
+        let _ = channel_id
+            .say(&ctx.http, "You are not admin. Request denied.")
+            .await;
+        return;
+    }
 
-        // Send confirmation message
-        if let Err(why) =
-            discord::say(ctx, channel_id, "Conversation history has been cleared.").await
-        {
-            tracing::error!("Error sending confirmation message: {:?}", why);
-        }
-    } else {
-        // Send warning message to non-developer users
-        if let Err(why) = discord::say(ctx, channel_id, "You are not admin. Request denied.").await
-        {
-            tracing::error!("Error sending warning message: {:?}", why);
-        }
+    // Clear conversation history for this channel
+    clear_conversation_history(channel_id).await;
+
+    // Send confirmation message
+    if let Err(why) = discord::say(ctx, channel_id, "Conversation history has been cleared.").await
+    {
+        tracing::error!("Error sending confirmation message: {:?}", why);
     }
 }
 
@@ -63,18 +61,68 @@ async fn handle_model_command(
     model_name: &str,
 ) {
     // Only allow the developer to change the model
-    if author_id != **utils::statics::DEV_USER_ID {
+    if author_id != **DEV_USER_ID {
         let _ = channel_id
             .say(&ctx.http, "You are not admin. Request denied.")
             .await;
         return;
     }
+    
+    // Trim the model name and check if it's empty
+    let model_name = model_name.trim();
+    if model_name.is_empty() {
+        let _ = channel_id
+            .say(&ctx.http, "Please specify a model name.")
+            .await;
+        return;
+    }
 
     // Change the model and get the response
-    let response = utils::openai::change_model(model_name).await;
+    let response = change_model(model_name).await;
 
     // Send the response
     let _ = channel_id.say(&ctx.http, response).await;
+}
+
+/// Handles the developer message command
+async fn handle_dev_command(
+    ctx: &Context,
+    channel_id: ChannelId,
+    author_id: UserId,
+    dev_message: &str,
+) {
+    // Only allow the developer to send developer messages
+    if author_id != **DEV_USER_ID {
+        let _ = channel_id
+            .say(&ctx.http, "You are not admin. Request denied.")
+            .await;
+        return;
+    }
+    
+    // Trim the developer message and check if it's empty
+    let dev_message = dev_message.trim();
+    if dev_message.is_empty() {
+        let _ = channel_id
+            .say(&ctx.http, "Please specify a developer message.")
+            .await;
+        return;
+    }
+
+    // Add the developer message to the conversation history
+    let mut manager = CONVERSATION_MANAGER.lock().await;
+    manager.add_message(
+        channel_id,
+        ConversationMessage::developer(dev_message.to_string()),
+    );
+    drop(manager); // Release the lock
+
+    // Send confirmation
+    let _ = channel_id
+        .say(
+            &ctx.http,
+            "Developer message added to conversation history.",
+        )
+        .await;
 }
 
 /// Process a message that mentions the bot and send a response
@@ -141,11 +189,14 @@ impl EventHandler for MintyBotHandler {
 
             // Check if this is a model change command
             if let Some(model_name) = content_without_mention.trim().strip_prefix("<model>") {
-                let model_name = model_name.trim();
-                if !model_name.is_empty() {
                     handle_model_command(&ctx, channel_id, author.id, model_name).await;
                     return;
                 }
+
+            // Check if this is a developer message command
+            if let Some(dev_message) = content_without_mention.trim().strip_prefix("<dev>") {
+                handle_dev_command(&ctx, channel_id, author.id, dev_message).await;
+                return;
             }
 
             // Log the received message
