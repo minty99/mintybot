@@ -13,6 +13,7 @@ const SYSTEM_PROMPT: &str = "너는 MintyBot이라는 Discord 봇이야. 친구�
 pub struct ChatMessage {
     pub role: String,
     pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
 }
 
