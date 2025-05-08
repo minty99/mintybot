@@ -9,7 +9,7 @@ use std::sync::Arc;
 use tokio::time::{Duration, sleep};
 
 use utils::conversation::{CONVERSATION_MANAGER, clear_conversation_history};
-use utils::conversation::{ConversationMessage, add_user_message};
+use utils::conversation::{ChatMessage, add_user_message};
 use utils::discord;
 use utils::openai::{change_model, get_chatgpt_response};
 use utils::statics::DEV_USER_ID;
@@ -131,10 +131,7 @@ async fn handle_dev_command(
 
     // Add the developer message to the conversation history
     let mut manager = CONVERSATION_MANAGER.lock().await;
-    manager.add_message(
-        channel_id,
-        ConversationMessage::developer(dev_message.to_string()),
-    );
+    manager.add_message(channel_id, ChatMessage::developer(dev_message.to_string()));
     drop(manager); // Release the lock
 
     // Send confirmation

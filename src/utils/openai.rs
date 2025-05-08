@@ -5,9 +5,7 @@ use serenity::model::id::ChannelId;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use crate::utils::conversation::{
-    ConversationMessage, add_assistant_message, get_conversation_history,
-};
+use crate::utils::conversation::{ChatMessage, add_assistant_message, get_conversation_history};
 use crate::utils::statics::OPENAI_TOKEN;
 
 // Model constants
@@ -17,24 +15,6 @@ const DEFAULT_TEMPERATURE: f32 = 0.7;
 // Global model name that can be changed
 lazy_static! {
     static ref CURRENT_MODEL: Arc<Mutex<String>> = Arc::new(Mutex::new(DEFAULT_MODEL.to_string()));
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct ChatMessage {
-    role: String,
-    content: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    name: Option<String>,
-}
-
-impl From<ConversationMessage> for ChatMessage {
-    fn from(msg: ConversationMessage) -> Self {
-        Self {
-            role: msg.role,
-            content: msg.content,
-            name: msg.name,
-        }
-    }
 }
 
 #[derive(Debug, Serialize)]
@@ -70,11 +50,8 @@ pub async fn get_chatgpt_response(channel_id: ChannelId) -> eyre::Result<String>
     // Get conversation history for this channel
     let history = get_conversation_history(channel_id).await;
 
-    // Convert ConversationMessage to ChatMessage
-    let messages: Vec<ChatMessage> = history.into_iter().map(ChatMessage::from).collect();
-
     // Create and send the request to OpenAI
-    let response_content = send_chat_completion_request(messages).await?;
+    let response_content = send_chat_completion_request(history).await?;
 
     // Store the assistant's response in the conversation history
     add_assistant_message(channel_id, response_content.clone()).await;

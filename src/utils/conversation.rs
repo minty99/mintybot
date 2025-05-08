@@ -10,13 +10,13 @@ const MAX_HISTORY_LENGTH: usize = 100;
 const SYSTEM_PROMPT: &str = "너는 MintyBot이라는 Discord 봇이야. 친구들의 질문에 재미있게 대답해 줘. 굳이 친절할 필요는 없고, 재미있는 친구가 되어 주면 충분해. 가끔은 조금 무례해도 괜찮아.";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ConversationMessage {
+pub struct ChatMessage {
     pub role: String,
     pub content: String,
     pub name: Option<String>,
 }
 
-impl ConversationMessage {
+impl ChatMessage {
     /// Create a new user message
     pub fn user(content: String, name: Option<String>) -> Self {
         Self {
@@ -48,7 +48,7 @@ impl ConversationMessage {
 #[derive(Debug, Default)]
 pub struct ConversationHistory {
     // Map of channel ID to conversation history
-    conversations: HashMap<ChannelId, Vec<ConversationMessage>>,
+    conversations: HashMap<ChannelId, Vec<ChatMessage>>,
 }
 
 impl ConversationHistory {
@@ -60,7 +60,7 @@ impl ConversationHistory {
     }
 
     /// Add a message to the conversation history for a specific channel
-    pub fn add_message(&mut self, channel_id: ChannelId, message: ConversationMessage) {
+    pub fn add_message(&mut self, channel_id: ChannelId, message: ChatMessage) {
         let history = self.get_or_create_history(channel_id);
 
         // Add the new message
@@ -71,10 +71,10 @@ impl ConversationHistory {
     }
 
     /// Get or create a conversation history for a channel
-    fn get_or_create_history(&mut self, channel_id: ChannelId) -> &mut Vec<ConversationMessage> {
+    fn get_or_create_history(&mut self, channel_id: ChannelId) -> &mut Vec<ChatMessage> {
         self.conversations.entry(channel_id).or_insert_with(|| {
             // Initialize with system message for new conversations
-            vec![ConversationMessage::developer(SYSTEM_PROMPT.to_string())]
+            vec![ChatMessage::developer(SYSTEM_PROMPT.to_string())]
         })
     }
 
@@ -87,7 +87,7 @@ impl ConversationHistory {
         if history.len() > MAX_HISTORY_LENGTH {
             // Keep the system message (at index 0) and the most recent messages
             let system_message = history[0].clone();
-            let recent_messages: Vec<ConversationMessage> = history
+            let recent_messages: Vec<ChatMessage> = history
                 .iter()
                 .skip(history.len() - MAX_HISTORY_LENGTH + 1) // +1 to account for system message
                 .cloned()
@@ -100,11 +100,11 @@ impl ConversationHistory {
     }
 
     /// Get the conversation history for a specific channel
-    pub fn get_history(&self, channel_id: ChannelId) -> Vec<ConversationMessage> {
+    pub fn get_history(&self, channel_id: ChannelId) -> Vec<ChatMessage> {
         self.conversations
             .get(&channel_id)
             .cloned()
-            .unwrap_or_else(|| vec![ConversationMessage::developer(SYSTEM_PROMPT.to_string())])
+            .unwrap_or_else(|| vec![ChatMessage::developer(SYSTEM_PROMPT.to_string())])
     }
 
     /// Clear the conversation history for a specific channel
@@ -124,17 +124,17 @@ lazy_static! {
 /// Add a user message to the conversation history
 pub async fn add_user_message(channel_id: ChannelId, content: String, username: Option<String>) {
     let mut manager = CONVERSATION_MANAGER.lock().await;
-    manager.add_message(channel_id, ConversationMessage::user(content, username));
+    manager.add_message(channel_id, ChatMessage::user(content, username));
 }
 
 /// Add an assistant message to the conversation history
 pub async fn add_assistant_message(channel_id: ChannelId, content: String) {
     let mut manager = CONVERSATION_MANAGER.lock().await;
-    manager.add_message(channel_id, ConversationMessage::assistant(content));
+    manager.add_message(channel_id, ChatMessage::assistant(content));
 }
 
 /// Get the conversation history for a specific channel
-pub async fn get_conversation_history(channel_id: ChannelId) -> Vec<ConversationMessage> {
+pub async fn get_conversation_history(channel_id: ChannelId) -> Vec<ChatMessage> {
     let manager = CONVERSATION_MANAGER.lock().await;
     manager.get_history(channel_id)
 }
