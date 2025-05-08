@@ -12,14 +12,12 @@ lazy_static! {
             .expect("Dev user id should be a number")
             .into()
     );
-
     pub static ref DISCORD_TOKEN: Arc<String> = Arc::new(
         env::var("MINTYBOT_DISCORD_TOKEN")
             .expect("MINTYBOT_DISCORD_TOKEN environment variable must be set")
             .trim_end()
             .to_string()
     );
-    
     pub static ref OPENAI_TOKEN: Arc<String> = Arc::new(
         env::var("MINTYBOT_OPENAI_TOKEN")
             .expect("MINTYBOT_OPENAI_TOKEN environment variable must be set")

@@ -3,45 +3,59 @@ use serenity::{model::prelude::ChannelId, prelude::Context};
 use super::statics::DEV_USER_ID;
 
 /// Send a message to a Discord channel, automatically handling message chunking for long messages
-pub async fn say(ctx: &Context, channel: ChannelId, msg: impl std::fmt::Display) -> eyre::Result<()> {
+pub async fn say(
+    ctx: &Context,
+    channel: ChannelId,
+    msg: impl std::fmt::Display,
+) -> eyre::Result<()> {
     // Convert the message to a string
     let content = msg.to_string();
-    
+
     // Discord has a 2000 character limit per message
     const DISCORD_MESSAGE_LIMIT: usize = 2000;
-    
+
     if content.len() <= DISCORD_MESSAGE_LIMIT {
         // Send as a single message if it's short enough
-        channel.say(&ctx.http, content).await.map_err(|e| eyre::eyre!("{}", e))?;
+        channel
+            .say(&ctx.http, content)
+            .await
+            .map_err(|e| eyre::eyre!("{}", e))?;
     } else {
         send_chunked_message(ctx, channel, content).await?;
     }
-    
+
     Ok(())
 }
 
 /// Split a long message into chunks and send them sequentially
-async fn send_chunked_message(ctx: &Context, channel: ChannelId, content: String) -> eyre::Result<()> {
+async fn send_chunked_message(
+    ctx: &Context,
+    channel: ChannelId,
+    content: String,
+) -> eyre::Result<()> {
     // Discord has a 2000 character limit per message
     const DISCORD_MESSAGE_LIMIT: usize = 2000;
-    
+
     // Split the message into chunks
     let mut remaining = content.as_str();
-    
+
     while !remaining.is_empty() {
         let chunk_size = std::cmp::min(DISCORD_MESSAGE_LIMIT, remaining.len());
-        
+
         // Try to find a good breaking point (newline or space)
         let actual_size = find_chunk_break_point(remaining, chunk_size);
-        
+
         // Send this chunk
         let chunk = &remaining[..actual_size];
-        channel.say(&ctx.http, chunk).await.map_err(|e| eyre::eyre!("{}", e))?;
-        
+        channel
+            .say(&ctx.http, chunk)
+            .await
+            .map_err(|e| eyre::eyre!("{}", e))?;
+
         // Move to the next chunk
         remaining = &remaining[actual_size..];
     }
-    
+
     Ok(())
 }
 
@@ -50,7 +64,7 @@ fn find_chunk_break_point(text: &str, max_size: usize) -> usize {
     if max_size >= text.len() {
         return text.len();
     }
-    
+
     // Ensure max_size is at a valid character boundary
     let safe_max_size = find_safe_boundary(text, max_size);
 
@@ -79,7 +93,9 @@ fn find_safe_boundary(text: &str, pos: usize) -> usize {
 /// Send a direct message to the developer
 pub async fn send_dm_to_dev(ctx: &Context, msg: &str) -> eyre::Result<()> {
     if let Ok(user) = DEV_USER_ID.to_user(&ctx.http).await {
-        user.dm(&ctx.http, |m| m.content(msg)).await.map_err(|e| eyre::eyre!("{}", e))?;
+        user.dm(&ctx.http, |m| m.content(msg))
+            .await
+            .map_err(|e| eyre::eyre!("{}", e))?;
     }
 
     Ok(())
@@ -110,16 +126,16 @@ mod tests {
         // Test with Korean characters (multi-byte)
         let text = "안녕하세요 반갑습니다";
         let max_size = 10; // In the middle of Korean text
-        
+
         // Get result
         let result = find_chunk_break_point(text, max_size);
-        
+
         // Verify the result is a valid character boundary
         assert!(text.is_char_boundary(result));
-        
+
         // Verify the result is less than or equal to max_size
         assert!(result <= max_size);
-        
+
         // Since max_size is 10, which is in the middle of '세' (bytes 9..12),
         // the function should return 9 (the start of '세')
         assert_eq!(result, 9);
@@ -130,11 +146,11 @@ mod tests {
         // Test with no good break point (no space or newline)
         let text = "안녕하세요반갑습니다";
         let max_size = 10; // In the middle of Korean text
-        
+
         // The result should be a valid character boundary
         let result = find_chunk_break_point(text, max_size);
         assert!(text.is_char_boundary(result));
-        
+
         // Should find a safe character boundary
         assert!(result <= max_size);
     }
