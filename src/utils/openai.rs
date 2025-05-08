@@ -6,7 +6,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use crate::utils::conversation::{
-    add_assistant_message, get_conversation_history, ConversationMessage,
+    ConversationMessage, add_assistant_message, get_conversation_history,
 };
 use crate::utils::statics::OPENAI_TOKEN;
 

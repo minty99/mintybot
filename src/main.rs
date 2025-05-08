@@ -7,7 +7,7 @@ use serenity::model::user::CurrentUser;
 use serenity::{async_trait, model::channel::Message, model::gateway::Ready, prelude::*};
 use std::future::Future;
 use std::sync::Arc;
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 
 use utils::conversation::add_user_message;
 use utils::conversation::clear_conversation_history;
