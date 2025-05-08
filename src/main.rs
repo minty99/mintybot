@@ -22,12 +22,16 @@ fn handle_bot_mentions(content: &str, bot_user: CurrentUser) -> (bool, String) {
     let bot_username = bot_user.name;
     let regular_mention = format!("<@{bot_user_id}>");
     let text_mention = format!("@{bot_username}");
+    let role_mention = "@MintyBot"; // Role mention
 
-    let contains_mention = content.contains(&regular_mention) || content.contains(&text_mention);
+    let contains_mention = content.contains(&regular_mention) 
+        || content.contains(&text_mention)
+        || content.contains(role_mention);
 
     let content_without_mention = content
         .replace(&regular_mention, "") // regular discord mention
         .replace(&text_mention, "") // text mention with username
+        .replace(role_mention, "") // role mention
         .trim()
         .to_string();
 
