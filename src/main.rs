@@ -144,14 +144,9 @@ async fn handle_dev_command(
 }
 
 /// Process a message that mentions the bot and send a response
-async fn process_bot_mention(
-    ctx: &Context,
-    channel_id: ChannelId,
-    content: String,
-    name: Option<String>,
-) {
+async fn process_bot_mention(ctx: &Context, channel_id: ChannelId, content: String, name: String) {
     // Add the user's message to the conversation history
-    add_user_message(channel_id, content.clone(), name).await;
+    add_user_message(channel_id, content.clone(), Some(name)).await;
 
     // Send the message to ChatGPT and handle the response
     match get_chatgpt_response(channel_id).await {
@@ -225,18 +220,22 @@ impl EventHandler for MintyBotHandler {
             // Log the received message
             tracing::info!("Received mention with message: {}", content_without_mention);
 
-            // Get the name of the message author. If the message is from a guild, prefer to use the nickname.
-            let name = if let Some(guild_id) = guild_id {
-                author
-                    .nick_in(&ctx.http, guild_id)
-                    .await
-                    .unwrap_or(author.name.clone())
+            let nick = if let Some(guild_id) = guild_id {
+                author.nick_in(&ctx.http, guild_id).await
             } else {
-                author.name.clone()
+                None
             };
+            let global_name = author.global_name;
+            let name = Some(author.name);
+
+            let selected_name = vec![nick, global_name, name]
+                .into_iter()
+                .find(|opt| opt.is_some())
+                .flatten()
+                .unwrap();
 
             // Process the mention and send a response
-            process_bot_mention(&ctx, channel_id, content_without_mention, Some(name)).await;
+            process_bot_mention(&ctx, channel_id, content_without_mention, selected_name).await;
         }
     }
 
