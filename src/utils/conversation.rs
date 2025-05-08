@@ -13,14 +13,16 @@ const SYSTEM_PROMPT: &str = "너는 MintyBot이라는 Discord 봇이야. 친구�
 pub struct ConversationMessage {
     pub role: String,
     pub content: String,
+    pub name: Option<String>,
 }
 
 impl ConversationMessage {
     /// Create a new user message
-    pub fn user(content: String) -> Self {
+    pub fn user(content: String, name: Option<String>) -> Self {
         Self {
             role: "user".to_string(),
             content,
+            name,
         }
     }
 
@@ -29,14 +31,16 @@ impl ConversationMessage {
         Self {
             role: "assistant".to_string(),
             content,
+            name: Some("MintyBot".to_string()),
         }
     }
 
-    /// Create a new system message
-    pub fn system(content: String) -> Self {
+    /// Create a new developer message
+    pub fn developer(content: String) -> Self {
         Self {
-            role: "system".to_string(),
+            role: "developer".to_string(),
             content,
+            name: None,
         }
     }
 }
@@ -70,7 +74,7 @@ impl ConversationHistory {
     fn get_or_create_history(&mut self, channel_id: ChannelId) -> &mut Vec<ConversationMessage> {
         self.conversations.entry(channel_id).or_insert_with(|| {
             // Initialize with system message for new conversations
-            vec![ConversationMessage::system(SYSTEM_PROMPT.to_string())]
+            vec![ConversationMessage::developer(SYSTEM_PROMPT.to_string())]
         })
     }
 
@@ -100,7 +104,7 @@ impl ConversationHistory {
         self.conversations
             .get(&channel_id)
             .cloned()
-            .unwrap_or_else(|| vec![ConversationMessage::system(SYSTEM_PROMPT.to_string())])
+            .unwrap_or_else(|| vec![ConversationMessage::developer(SYSTEM_PROMPT.to_string())])
     }
 
     /// Clear the conversation history for a specific channel
@@ -118,9 +122,9 @@ lazy_static! {
 // Helper functions to interact with the global conversation manager
 
 /// Add a user message to the conversation history
-pub async fn add_user_message(channel_id: ChannelId, content: String) {
+pub async fn add_user_message(channel_id: ChannelId, content: String, username: Option<String>) {
     let mut manager = CONVERSATION_MANAGER.lock().await;
-    manager.add_message(channel_id, ConversationMessage::user(content));
+    manager.add_message(channel_id, ConversationMessage::user(content, username));
 }
 
 /// Add an assistant message to the conversation history

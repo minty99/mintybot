@@ -126,9 +126,14 @@ async fn handle_dev_command(
 }
 
 /// Process a message that mentions the bot and send a response
-async fn process_bot_mention(ctx: &Context, channel_id: ChannelId, content: String) {
+async fn process_bot_mention(
+    ctx: &Context,
+    channel_id: ChannelId,
+    content: String,
+    name: Option<String>,
+) {
     // Add the user's message to the conversation history
-    add_user_message(channel_id, content.clone()).await;
+    add_user_message(channel_id, content.clone(), name).await;
 
     // Send the message to ChatGPT and handle the response
     match get_chatgpt_response(channel_id).await {
@@ -189,9 +194,9 @@ impl EventHandler for MintyBotHandler {
 
             // Check if this is a model change command
             if let Some(model_name) = content_without_mention.trim().strip_prefix("<model>") {
-                    handle_model_command(&ctx, channel_id, author.id, model_name).await;
-                    return;
-                }
+                handle_model_command(&ctx, channel_id, author.id, model_name).await;
+                return;
+            }
 
             // Check if this is a developer message command
             if let Some(dev_message) = content_without_mention.trim().strip_prefix("<dev>") {
@@ -202,8 +207,11 @@ impl EventHandler for MintyBotHandler {
             // Log the received message
             tracing::info!("Received mention with message: {}", content_without_mention);
 
+            // Get the name of the message author
+            let name = Some(author.name.clone());
+
             // Process the mention and send a response
-            process_bot_mention(&ctx, channel_id, content_without_mention).await;
+            process_bot_mention(&ctx, channel_id, content_without_mention, name).await;
         }
     }
 

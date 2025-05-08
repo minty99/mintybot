@@ -23,6 +23,8 @@ lazy_static! {
 struct ChatMessage {
     role: String,
     content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
 }
 
 impl From<ConversationMessage> for ChatMessage {
@@ -30,6 +32,7 @@ impl From<ConversationMessage> for ChatMessage {
         Self {
             role: msg.role,
             content: msg.content,
+            name: msg.name,
         }
     }
 }
