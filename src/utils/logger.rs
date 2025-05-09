@@ -1,5 +1,4 @@
 use chrono::{DateTime, Local};
-use serenity::model::id::ChannelId;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::Path;
@@ -8,6 +7,8 @@ use std::time::Duration;
 use tokio::sync::Mutex;
 
 use crate::utils::conversation::ChatMessage;
+
+use super::msg_context::MsgContextInfo;
 
 // Global logger instance
 lazy_static::lazy_static! {
@@ -33,7 +34,7 @@ impl Logger {
     // Log OpenAI request and response
     pub fn log_openai_conversation(
         &self,
-        channel_id: ChannelId,
+        msg_ctx: &MsgContextInfo,
         messages: &[ChatMessage],
         response: &str,
         duration: Duration,
@@ -52,7 +53,16 @@ impl Logger {
             file,
             "\n\n====================================================="
         )?;
-        writeln!(file, "Channel ID: {channel_id}")?;
+        writeln!(file, "Channel ID: {}", msg_ctx.channel_id)?;
+        if let Some(channel_name) = &msg_ctx.channel_name {
+            writeln!(file, "Channel Name: {channel_name}")?;
+        }
+        if let Some(guild_id) = msg_ctx.guild_id {
+            writeln!(file, "Guild ID: {guild_id}")?;
+        }
+        if let Some(guild_name) = &msg_ctx.guild_name {
+            writeln!(file, "Guild Name: {guild_name}")?;
+        }
         writeln!(file, "Timestamp: {timestamp} (KST)")?;
         writeln!(file, "API Call Duration: {duration:.2?}")?;
         writeln!(
@@ -78,11 +88,11 @@ impl Logger {
 
 /// Log an OpenAI conversation (request and response)
 pub async fn log_openai_conversation(
-    channel_id: ChannelId,
+    msg_ctx: &MsgContextInfo,
     messages: &[ChatMessage],
     response: &str,
     duration: std::time::Duration,
 ) -> std::io::Result<()> {
     let logger = LOGGER.lock().await;
-    logger.log_openai_conversation(channel_id, messages, response, duration)
+    logger.log_openai_conversation(msg_ctx, messages, response, duration)
 }

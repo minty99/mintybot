@@ -1,13 +1,13 @@
 use lazy_static::lazy_static;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use serenity::model::id::ChannelId;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::Mutex;
 
 use crate::utils::conversation::{ChatMessage, add_assistant_message, get_conversation_history};
 use crate::utils::logger::log_openai_conversation;
+use crate::utils::msg_context::MsgContextInfo;
 use crate::utils::statics::OPENAI_TOKEN;
 
 // Model constants
@@ -48,9 +48,9 @@ struct ChatCompletionResponse {
 }
 
 /// Get a response from ChatGPT for the conversation in the specified channel
-pub async fn get_chatgpt_response(channel_id: ChannelId) -> eyre::Result<String> {
+pub async fn get_chatgpt_response(msg_ctx: &MsgContextInfo) -> eyre::Result<String> {
     // Get conversation history for this channel
-    let history = get_conversation_history(channel_id).await;
+    let history = get_conversation_history(msg_ctx.channel_id).await;
 
     // Create and send the request to OpenAI, measuring the time it takes
     let start_time = Instant::now();
@@ -58,13 +58,12 @@ pub async fn get_chatgpt_response(channel_id: ChannelId) -> eyre::Result<String>
     let duration = start_time.elapsed();
 
     // Log the conversation (request and response)
-    if let Err(e) = log_openai_conversation(channel_id, &history, &response_content, duration).await
-    {
+    if let Err(e) = log_openai_conversation(msg_ctx, &history, &response_content, duration).await {
         eprintln!("Failed to log OpenAI conversation: {e}");
     }
 
     // Store the assistant's response in the conversation history
-    add_assistant_message(channel_id, response_content.clone()).await;
+    add_assistant_message(msg_ctx.channel_id, response_content.clone()).await;
 
     Ok(response_content)
 }
@@ -115,3 +114,5 @@ pub async fn change_model(model_name: &str) -> String {
 pub async fn get_current_model() -> String {
     CURRENT_MODEL.lock().await.clone()
 }
+
+// This function is no longer needed as we're using DiscordContextInfo

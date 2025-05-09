@@ -11,6 +11,7 @@ use tokio::time::{Duration, sleep};
 use utils::conversation::{CONVERSATION_MANAGER, clear_conversation_history};
 use utils::conversation::{ChatMessage, add_user_message};
 use utils::discord;
+use utils::msg_context::MsgContextInfo;
 use utils::openai::{change_model, get_chatgpt_response};
 use utils::statics::DEV_USER_ID;
 use utils::statics::DISCORD_TOKEN;
@@ -144,15 +145,20 @@ async fn handle_dev_command(
 }
 
 /// Process a message that mentions the bot and send a response
-async fn process_bot_mention(ctx: &Context, channel_id: ChannelId, content: String, name: String) {
+async fn process_bot_mention(
+    ctx: &Context,
+    msg_ctx: &MsgContextInfo,
+    content: String,
+    name: String,
+) {
     // Add the user's message to the conversation history
-    add_user_message(channel_id, content.clone(), Some(name)).await;
+    add_user_message(msg_ctx.channel_id, content.clone(), Some(name)).await;
 
     // Send the message to ChatGPT and handle the response
-    match get_chatgpt_response(channel_id).await {
+    match get_chatgpt_response(msg_ctx).await {
         Ok(response) => {
             // Send the response back to Discord
-            if let Err(why) = discord::say(ctx, channel_id, &response).await {
+            if let Err(why) = discord::say(ctx, msg_ctx.channel_id, &response).await {
                 tracing::error!("Error sending ChatGPT response: {:?}", why);
             }
         }
@@ -162,7 +168,7 @@ async fn process_bot_mention(ctx: &Context, channel_id: ChannelId, content: Stri
             let error_message = format!(
                 "Sorry, I couldn't get a response from ChatGPT at the moment. Error: {err}"
             );
-            if let Err(why) = discord::say(ctx, channel_id, error_message).await {
+            if let Err(why) = discord::say(ctx, msg_ctx.channel_id, error_message).await {
                 tracing::error!("Error sending error message: {:?}", why);
             }
         }
@@ -179,8 +185,6 @@ impl EventHandler for MintyBotHandler {
     // Event handlers are dispatched through a threadpool, and so multiple
     // events can be dispatched simultaneously.
     async fn message(&self, ctx: Context, msg: Message) {
-        let channel_id = msg.channel_id;
-        let guild_id = msg.guild_id;
         let author = msg.author.clone();
 
         tracing::debug!("Text: {:?}", msg);
@@ -196,31 +200,34 @@ impl EventHandler for MintyBotHandler {
             handle_bot_mentions(&ctx, &msg).await;
 
         if is_mentioned || contains_text_mention {
+            // Create message context info
+            let msg_ctx = MsgContextInfo::from_channel_id(&ctx, msg.channel_id).await;
+
             // Send a typing indicator while processing
-            let _ = channel_id.broadcast_typing(&ctx.http).await;
+            let _ = msg.channel_id.broadcast_typing(&ctx.http).await;
 
             // Check if this is a forget command
             if content_without_mention.trim() == "<forget>" {
-                handle_forget_command(&ctx, channel_id, author.id).await;
+                handle_forget_command(&ctx, msg.channel_id, author.id).await;
                 return;
             }
 
             // Check if this is a model change command
             if let Some(model_name) = content_without_mention.trim().strip_prefix("<model>") {
-                handle_model_command(&ctx, channel_id, author.id, model_name).await;
+                handle_model_command(&ctx, msg.channel_id, author.id, model_name).await;
                 return;
             }
 
             // Check if this is a developer message command
             if let Some(dev_message) = content_without_mention.trim().strip_prefix("<dev>") {
-                handle_dev_command(&ctx, channel_id, author.id, dev_message).await;
+                handle_dev_command(&ctx, msg.channel_id, author.id, dev_message).await;
                 return;
             }
 
             // Log the received message
             tracing::info!("Received mention with message: {}", content_without_mention);
 
-            let nick = if let Some(guild_id) = guild_id {
+            let nick = if let Some(guild_id) = msg_ctx.guild_id {
                 author.nick_in(&ctx.http, guild_id).await
             } else {
                 None
@@ -235,7 +242,7 @@ impl EventHandler for MintyBotHandler {
                 .unwrap();
 
             // Process the mention and send a response
-            process_bot_mention(&ctx, channel_id, content_without_mention, selected_name).await;
+            process_bot_mention(&ctx, &msg_ctx, content_without_mention, selected_name).await;
         }
     }
 
