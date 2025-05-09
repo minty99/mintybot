@@ -3,9 +3,11 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serenity::model::id::ChannelId;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::sync::Mutex;
 
 use crate::utils::conversation::{ChatMessage, add_assistant_message, get_conversation_history};
+use crate::utils::logger::log_openai_conversation;
 use crate::utils::statics::OPENAI_TOKEN;
 
 // Model constants
@@ -50,8 +52,16 @@ pub async fn get_chatgpt_response(channel_id: ChannelId) -> eyre::Result<String>
     // Get conversation history for this channel
     let history = get_conversation_history(channel_id).await;
 
-    // Create and send the request to OpenAI
-    let response_content = send_chat_completion_request(history).await?;
+    // Create and send the request to OpenAI, measuring the time it takes
+    let start_time = Instant::now();
+    let response_content = send_chat_completion_request(history.clone()).await?;
+    let duration = start_time.elapsed();
+
+    // Log the conversation (request and response)
+    if let Err(e) = log_openai_conversation(channel_id, &history, &response_content, duration).await
+    {
+        eprintln!("Failed to log OpenAI conversation: {e}");
+    }
 
     // Store the assistant's response in the conversation history
     add_assistant_message(channel_id, response_content.clone()).await;
