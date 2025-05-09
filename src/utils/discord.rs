@@ -1,13 +1,11 @@
+use std::fmt::Display;
+
 use serenity::{all::CreateMessage, model::prelude::ChannelId, prelude::Context};
 
 use super::statics::DEV_USER_ID;
 
 /// Send a message to a Discord channel, automatically handling message chunking for long messages
-pub async fn say(
-    ctx: &Context,
-    channel: ChannelId,
-    msg: impl std::fmt::Display,
-) -> eyre::Result<()> {
+pub async fn say(ctx: &Context, channel: ChannelId, msg: impl Display) -> eyre::Result<()> {
     // Convert the message to a string
     let content = msg.to_string();
 
