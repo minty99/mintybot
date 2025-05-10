@@ -17,7 +17,7 @@ lazy_static::lazy_static! {
 
 impl Default for Logger {
     fn default() -> Self {
-        Self::new("logs")
+        Self::new("data/logs")
     }
 }
 
@@ -29,7 +29,7 @@ impl Logger {
     pub fn new(log_dir: &str) -> Self {
         // Ensure logs directory exists
         if !Path::new(log_dir).exists() {
-            fs::create_dir_all(log_dir).expect("Failed to create logs directory");
+            fs::create_dir_all(log_dir).expect("Failed to create log directory");
         }
 
         Self {

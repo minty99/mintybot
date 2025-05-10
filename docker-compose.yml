@@ -11,4 +11,4 @@ services:
       - MINTYBOT_DEV_USER_ID=${MINTYBOT_DEV_USER_ID}
       - RUST_LOG=info,mintybot=debug
     volumes:
-      - ./logs:/app/logs
+      - ./data:/app/data

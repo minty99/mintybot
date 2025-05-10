@@ -12,5 +12,5 @@ target/
 # Secrets
 .env
 
-# Logs
-logs
+# Persistent States, Logs, etc.
+data
