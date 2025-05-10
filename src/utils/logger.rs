@@ -12,7 +12,13 @@ use super::msg_context::MsgContextInfo;
 
 // Global logger instance
 lazy_static::lazy_static! {
-    static ref LOGGER: Arc<Mutex<Logger>> = Arc::new(Mutex::new(Logger::new()));
+    static ref LOGGER: Arc<Mutex<Logger>> = Arc::new(Mutex::new(Logger::default()));
+}
+
+impl Default for Logger {
+    fn default() -> Self {
+        Self::new("logs")
+    }
 }
 
 pub struct Logger {
@@ -20,15 +26,15 @@ pub struct Logger {
 }
 
 impl Logger {
-    pub fn new() -> Self {
-        let log_dir = "logs".to_string();
-
+    pub fn new(log_dir: &str) -> Self {
         // Ensure logs directory exists
-        if !Path::new(&log_dir).exists() {
-            fs::create_dir_all(&log_dir).expect("Failed to create logs directory");
+        if !Path::new(log_dir).exists() {
+            fs::create_dir_all(log_dir).expect("Failed to create logs directory");
         }
 
-        Self { log_dir }
+        Self {
+            log_dir: log_dir.to_string(),
+        }
     }
 
     // Log OpenAI request and response
