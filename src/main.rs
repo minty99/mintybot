@@ -1,6 +1,7 @@
 #![feature(let_chains)]
 
 use fs2::FileExt;
+use serenity::all::UserId;
 use serenity::{async_trait, model::channel::Message, model::gateway::Ready, prelude::*};
 use std::fs::File;
 use std::future::Future;
@@ -16,44 +17,47 @@ use mintybot::statics::DISCORD_TOKEN;
 use mintybot::utils::admin_commands::process_admin_command;
 use mintybot::utils::persistence::{load_state, save_state};
 
-/// Handles bot mention detection and content processing
-async fn handle_bot_mentions(ctx: &Context, msg: &Message) -> (bool, String) {
-    let mintybot_role_id = if let Some(guild_id) = msg.guild_id {
-        let roles = ctx.http.get_guild_roles(guild_id).await.unwrap();
-        roles
-            .iter()
-            .find(|role| role.name == "MintyBot")
-            .map(|role| role.id)
-    } else {
-        None
+fn clean_message_content(msg: &Message, user_id: UserId) -> String {
+    let mut content = msg.content.clone();
+
+    // 봇 멘션 제거
+    let user_mention = format!("<@{user_id}>");
+    let user_mention_nick = format!("<@!{user_id}>");
+
+    content = content.replace(&user_mention, "");
+    content = content.replace(&user_mention_nick, "");
+
+    // 역할 멘션 제거
+    for role in &msg.mention_roles {
+        let role_mention = format!("<@&{role}>");
+        content = content.replace(&role_mention, "");
+    }
+
+    content.trim().to_string()
+}
+
+async fn check_mentioned(ctx: &Context, msg: &Message) -> bool {
+    // Extract the necessary information from current_user and drop the reference immediately
+    let (user_id, user_name) = {
+        let current_user = ctx.cache.current_user();
+        (current_user.id, current_user.name.clone())
     };
 
-    let role_mentioned = if let Some(mintybot_role_id) = mintybot_role_id {
-        msg.mention_roles.contains(&mintybot_role_id)
-    } else {
-        false
+    let role_mentioned = match msg.guild_id {
+        Some(guild_id) => {
+            let member = guild_id.member(&ctx, user_id).await.unwrap();
+            let roles = member.roles(ctx).unwrap();
+            roles
+                .into_iter()
+                .find_map(|role| (role.name == user_name).then_some(role.id))
+                .map(|id| msg.mention_roles.contains(&id))
+                .unwrap_or(false)
+        }
+        None => false,
     };
+    let regular_mentioned = msg.mentions_me(&ctx).await.unwrap_or(false);
 
-    let regular_mentioned = msg.mentions_me(&ctx.http).await.unwrap_or(false);
-
-    let bot_user = ctx.http.get_current_user().await.unwrap();
-
-    let regular_mention = format!("<@{}>", bot_user.id);
-    let role_mention = mintybot_role_id
-        .map(|id| format!("<@&{id}>"))
-        .unwrap_or_default();
-
-    let contains_mention = regular_mentioned || role_mentioned;
-
-    let content_without_mention = msg
-        .content
-        .clone()
-        .replace(&regular_mention, "") // regular discord mention
-        .replace(&role_mention, "") // role mention
-        .trim()
-        .to_string();
-
-    (contains_mention, content_without_mention)
+    regular_mentioned || role_mentioned
 }
 
 /// Process a message that mentions the bot and send a response
@@ -107,11 +111,10 @@ impl EventHandler for MintyBotHandler {
         }
 
         // Check if the bot is mentioned in the message
-        let is_mentioned = msg.mentions_me(&ctx.http).await.unwrap_or(false);
-        let (contains_text_mention, content_without_mention) =
-            handle_bot_mentions(&ctx, &msg).await;
+        let is_mentioned = check_mentioned(&ctx, &msg).await;
+        let content_without_mention = clean_message_content(&msg, author.id);
 
-        if is_mentioned || contains_text_mention {
+        if is_mentioned {
             // Create message context info
             let msg_ctx = MsgContextInfo::from_message(&ctx, &msg).await;
 
@@ -139,7 +142,6 @@ impl EventHandler for MintyBotHandler {
     // private channels, and more.
     //
     // In this case, just print what the current user's username is.
-    #[allow(unused_variables)]
     async fn ready(&self, ctx: Context, ready: Ready) {
         let bot_name = ready.user.name.clone();
         tracing::info!("{} is connected!", bot_name);
