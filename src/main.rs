@@ -1,7 +1,10 @@
 #![feature(let_chains)]
 
+use fs2::FileExt;
 use serenity::{async_trait, model::channel::Message, model::gateway::Ready, prelude::*};
+use std::fs::File;
 use std::future::Future;
+use std::path::Path;
 use std::sync::Arc;
 use tokio::time::{Duration, sleep};
 
@@ -203,10 +206,44 @@ where
     });
 }
 
+/// Acquire a file lock to ensure only one instance of the bot is running
+fn acquire_instance_lock() -> eyre::Result<File> {
+    // Create data directory if it doesn't exist
+    let lock_path = Path::new("data");
+    if !lock_path.exists() {
+        std::fs::create_dir_all(lock_path)?;
+    }
+
+    // Try to acquire the lock file
+    let lock_file_path = lock_path.join("mintybot.lock");
+    let file = File::create(&lock_file_path)?;
+
+    // Try to acquire an exclusive lock
+    match file.try_lock_exclusive() {
+        Ok(_) => {
+            tracing::info!("Successfully acquired instance lock");
+            Ok(file)
+        }
+        Err(e) => {
+            tracing::error!(
+                "Failed to acquire instance lock: another instance of MintyBot is already running"
+            );
+            Err(eyre::eyre!(
+                "Another instance of MintyBot is already running: {}",
+                e
+            ))
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
     // Initialize the tracing subscriber for logging
     tracing_subscriber::fmt::init();
+
+    // Ensure only one instance of the bot is running
+    let _lock_file = acquire_instance_lock()?;
+    tracing::info!("MintyBot instance lock acquired - this is the only running instance");
 
     // Load the bot state from disk
     if let Err(e) = load_state().await {
