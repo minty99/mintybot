@@ -110,9 +110,6 @@ pub async fn change_model(model_name: &str) -> String {
 }
 
 /// Get the current model name
-#[expect(dead_code)]
 pub async fn get_current_model() -> String {
     CURRENT_MODEL.lock().await.clone()
 }
-
-// This function is no longer needed as we're using DiscordContextInfo
