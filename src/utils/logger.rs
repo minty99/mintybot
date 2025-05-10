@@ -1,4 +1,4 @@
-use chrono::{DateTime, Local};
+use chrono::{FixedOffset, Utc};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::Path;
@@ -45,8 +45,14 @@ impl Logger {
         response: &str,
         duration: Duration,
     ) -> std::io::Result<()> {
-        let now: DateTime<Local> = Local::now();
-        let timestamp = now.format("%Y-%m-%d %H:%M:%S %z").to_string();
+        // Create KST timezone (UTC+9)
+        let kst = FixedOffset::east_opt(9 * 3600).unwrap();
+
+        // Convert current time to KST
+        let now_utc = Utc::now();
+        let now_kst = now_utc.with_timezone(&kst);
+
+        let timestamp = now_kst.format("%Y-%m-%d %H:%M:%S %z").to_string();
         let log_file_path = format!("{}/conversations.log", self.log_dir);
 
         let mut file = OpenOptions::new()
@@ -69,7 +75,7 @@ impl Logger {
         if let Some(guild_name) = &msg_ctx.guild_name {
             writeln!(file, "Guild Name: {guild_name}")?;
         }
-        writeln!(file, "Timestamp: {timestamp} (KST)")?;
+        writeln!(file, "Timestamp: {timestamp}")?;
         writeln!(file, "API Call Duration: {duration:.2?}")?;
         writeln!(
             file,
