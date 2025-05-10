@@ -1,23 +1,15 @@
-use lazy_static::lazy_static;
 use reqwest::{Client, Response};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use std::time::Instant;
-use tokio::sync::Mutex;
 
 use crate::utils::conversation::{ChatMessage, add_assistant_message, get_conversation_history};
 use crate::utils::logger::log_openai_conversation;
 use crate::utils::msg_context::MsgContextInfo;
+use crate::utils::persistence::{BOT_STATE, save_state};
 use crate::utils::statics::OPENAI_TOKEN;
 
 // Model constants
-const DEFAULT_MODEL: &str = "gpt-4.1";
 const DEFAULT_TEMPERATURE: f32 = 0.7;
-
-// Global model name that can be changed
-lazy_static! {
-    static ref CURRENT_MODEL: Arc<Mutex<String>> = Arc::new(Mutex::new(DEFAULT_MODEL.to_string()));
-}
 
 #[derive(Debug, Serialize)]
 struct ChatCompletionRequest {
@@ -28,7 +20,8 @@ struct ChatCompletionRequest {
 
 impl ChatCompletionRequest {
     async fn new(messages: Vec<ChatMessage>) -> Self {
-        let model = CURRENT_MODEL.lock().await.clone();
+        // Get model from persistent state
+        let model = BOT_STATE.lock().await.current_model.clone();
         Self {
             model,
             messages,
@@ -102,14 +95,23 @@ async fn process_openai_response(response: Response) -> eyre::Result<String> {
 
 /// Change the model used for ChatGPT requests
 pub async fn change_model(model_name: &str) -> String {
-    let mut current_model = CURRENT_MODEL.lock().await;
-    let old_model = current_model.clone();
-    *current_model = model_name.to_string();
+    // Update model in persistent state
+    let old_model;
+    {
+        let mut state = BOT_STATE.lock().await;
+        old_model = state.current_model.clone();
+        state.current_model = model_name.to_string();
+    }
+
+    // Save the state
+    if let Err(e) = save_state().await {
+        tracing::error!("Failed to save state after model change: {}", e);
+    }
 
     format!("Model changed from {old_model} to {model_name}")
 }
 
 /// Get the current model name
 pub async fn get_current_model() -> String {
-    CURRENT_MODEL.lock().await.clone()
+    BOT_STATE.lock().await.current_model.clone()
 }

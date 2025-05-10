@@ -1,14 +1,8 @@
-use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use serenity::model::id::ChannelId;
-use std::collections::HashMap;
 use std::fmt::Display;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 
-// Configuration constants
-const MAX_HISTORY_LENGTH: usize = 100;
-const SYSTEM_PROMPT: &str = "너는 MintyBot이라는 Discord 봇이야. 친구들의 질문에 재미있게 대답해 줘. 굳이 친절할 필요는 없고, 재미있는 친구가 되어 주면 충분해. 가끔은 조금 무례해도 괜찮아.";
+use crate::utils::persistence::{BOT_STATE, save_state};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
@@ -65,102 +59,46 @@ impl ChatMessage {
     }
 }
 
-#[derive(Debug, Default)]
-pub struct ConversationHistory {
-    // Map of channel ID to conversation history
-    conversations: HashMap<ChannelId, Vec<ChatMessage>>,
-}
-
-impl ConversationHistory {
-    /// Create a new conversation history manager
-    pub fn new() -> Self {
-        Self {
-            conversations: HashMap::new(),
-        }
-    }
-
-    /// Add a message to the conversation history for a specific channel
-    pub fn add_message(&mut self, channel_id: ChannelId, message: ChatMessage) {
-        let history = self.get_or_create_history(channel_id);
-
-        // Add the new message
-        history.push(message);
-
-        // Trim history if it exceeds the maximum length
-        self.trim_history_if_needed(channel_id);
-    }
-
-    /// Get or create a conversation history for a channel
-    fn get_or_create_history(&mut self, channel_id: ChannelId) -> &mut Vec<ChatMessage> {
-        self.conversations.entry(channel_id).or_insert_with(|| {
-            // Initialize with system message for new conversations
-            vec![ChatMessage::developer(SYSTEM_PROMPT.to_string())]
-        })
-    }
-
-    /// Trim the history if it exceeds the maximum length
-    fn trim_history_if_needed(&mut self, channel_id: ChannelId) {
-        let Some(history) = self.conversations.get_mut(&channel_id) else {
-            return;
-        };
-
-        if history.len() > MAX_HISTORY_LENGTH {
-            // Keep the system message (at index 0) and the most recent messages
-            let system_message = history[0].clone();
-            let recent_messages: Vec<ChatMessage> = history
-                .iter()
-                .skip(history.len() - MAX_HISTORY_LENGTH + 1) // +1 to account for system message
-                .cloned()
-                .collect();
-
-            // Rebuild history with system message and recent messages
-            *history = vec![system_message];
-            history.extend(recent_messages);
-        }
-    }
-
-    /// Get the conversation history for a specific channel
-    pub fn get_history(&self, channel_id: ChannelId) -> Vec<ChatMessage> {
-        self.conversations
-            .get(&channel_id)
-            .cloned()
-            .unwrap_or_else(|| vec![ChatMessage::developer(SYSTEM_PROMPT.to_string())])
-    }
-
-    /// Clear the conversation history for a specific channel
-    pub fn clear_history(&mut self, channel_id: ChannelId) {
-        self.conversations.remove(&channel_id);
-    }
-}
-
-// Global conversation history manager
-lazy_static! {
-    pub static ref CONVERSATION_MANAGER: Arc<Mutex<ConversationHistory>> =
-        Arc::new(Mutex::new(ConversationHistory::new()));
-}
-
 // Helper functions to interact with the global conversation manager
+
+/// Add a message to the persistent state
+async fn add_message_to_state(channel_id: ChannelId, message: ChatMessage) {
+    // Add to the persistent state
+    {
+        let mut state = BOT_STATE.lock().await;
+        state.add_message(channel_id, message);
+    }
+
+    // Save state
+    let _ = save_state().await;
+}
 
 /// Add a user message to the conversation history
 pub async fn add_user_message(channel_id: ChannelId, content: String, username: Option<String>) {
-    let mut manager = CONVERSATION_MANAGER.lock().await;
-    manager.add_message(channel_id, ChatMessage::user(content, username));
+    let message = ChatMessage::user(content, username);
+    add_message_to_state(channel_id, message).await;
 }
 
 /// Add an assistant message to the conversation history
 pub async fn add_assistant_message(channel_id: ChannelId, content: String) {
-    let mut manager = CONVERSATION_MANAGER.lock().await;
-    manager.add_message(channel_id, ChatMessage::assistant(content));
+    let message = ChatMessage::assistant(content);
+    add_message_to_state(channel_id, message).await;
 }
 
-/// Get the conversation history for a specific channel
+/// Get the conversation history for a specific channel, including the system prompt
 pub async fn get_conversation_history(channel_id: ChannelId) -> Vec<ChatMessage> {
-    let manager = CONVERSATION_MANAGER.lock().await;
-    manager.get_history(channel_id)
+    let state = BOT_STATE.lock().await;
+    state.get_conversation(channel_id)
 }
 
 /// Clear the conversation history for a specific channel
 pub async fn clear_conversation_history(channel_id: ChannelId) {
-    let mut manager = CONVERSATION_MANAGER.lock().await;
-    manager.clear_history(channel_id);
+    // Clear from persistent state
+    {
+        let mut state = BOT_STATE.lock().await;
+        state.remove_conversation(channel_id);
+    }
+
+    // Save state
+    let _ = save_state().await;
 }

@@ -1,9 +1,7 @@
-use lazy_static::lazy_static;
-use serenity::model::id::{ChannelId, GuildId};
+use serenity::model::channel::Message;
+use serenity::model::id::{ChannelId, GuildId, UserId};
+use serenity::model::user::User;
 use serenity::prelude::Context;
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 
 /// A struct that holds Discord context information about a message
 #[derive(Debug, Clone)]
@@ -12,33 +10,25 @@ pub struct MsgContextInfo {
     pub channel_name: Option<String>,
     pub guild_id: Option<GuildId>,
     pub guild_name: Option<String>,
-}
-
-// Global cache for MsgContextInfo
-lazy_static! {
-    static ref CONTEXT_CACHE: Arc<Mutex<HashMap<ChannelId, MsgContextInfo>>> =
-        Arc::new(Mutex::new(HashMap::new()));
+    pub author_id: UserId,
+    pub author: User,
 }
 
 impl MsgContextInfo {
-    /// Create a new MsgContextInfo from a message context, using cache when available
-    pub async fn from_channel_id(ctx: &Context, channel_id: ChannelId) -> Self {
-        // Check if we already have this channel in the cache
-        let mut cache = CONTEXT_CACHE.lock().await;
+    /// Create a new MsgContextInfo from a Message
+    pub async fn from_message(ctx: &Context, msg: &Message) -> Self {
+        let channel_id = msg.channel_id;
+        let author = msg.author.clone();
+        let author_id = author.id;
 
-        // If we have a cached entry, return a clone of it
-        if let Some(cached_info) = cache.get(&channel_id) {
-            return cached_info.clone();
-        }
-
-        // Otherwise, fetch the information from Discord API
+        // Try to get channel and guild information
         let channel_name = channel_id.name(&ctx.http).await.ok();
         let mut guild_id = None;
         let mut guild_name = None;
 
         // Try to get channel information
         if let Ok(channel) = channel_id.to_channel(&ctx.http).await {
-            // Try to get guild information if this is a guild channel. Private channel is not implemented yet.
+            // Try to get guild information if this is a guild channel
             if let Some(guild_channel) = channel.guild() {
                 let guild_id_value = guild_channel.guild_id;
                 guild_id = Some(guild_id_value);
@@ -50,17 +40,13 @@ impl MsgContextInfo {
             }
         }
 
-        // Create the new context info
-        let info = Self {
+        Self {
             channel_id,
             channel_name,
             guild_id,
             guild_name,
-        };
-
-        // Store in cache for future use
-        cache.insert(channel_id, info.clone());
-
-        info
+            author_id,
+            author,
+        }
     }
 }

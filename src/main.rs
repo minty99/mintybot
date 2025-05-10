@@ -1,18 +1,17 @@
 #![feature(let_chains)]
 
-use serenity::model::id::{ChannelId, UserId};
 use serenity::{async_trait, model::channel::Message, model::gateway::Ready, prelude::*};
 use std::future::Future;
 use std::sync::Arc;
 use tokio::time::{Duration, sleep};
 
-use mintybot::conversation::{CONVERSATION_MANAGER, clear_conversation_history};
-use mintybot::conversation::{ChatMessage, add_user_message};
+use mintybot::conversation::add_user_message;
 use mintybot::discord;
 use mintybot::msg_context::MsgContextInfo;
-use mintybot::openai::{change_model, get_chatgpt_response};
-use mintybot::statics::DEV_USER_ID;
+use mintybot::openai::get_chatgpt_response;
 use mintybot::statics::DISCORD_TOKEN;
+use mintybot::utils::admin_commands::process_admin_command;
+use mintybot::utils::persistence::{load_state, save_state};
 
 /// Handles bot mention detection and content processing
 async fn handle_bot_mentions(ctx: &Context, msg: &Message) -> (bool, String) {
@@ -52,94 +51,6 @@ async fn handle_bot_mentions(ctx: &Context, msg: &Message) -> (bool, String) {
         .to_string();
 
     (contains_mention, content_without_mention)
-}
-
-/// Handles the forget command from authorized users
-async fn handle_forget_command(ctx: &Context, channel_id: ChannelId, author_id: UserId) {
-    if author_id != **DEV_USER_ID {
-        let _ = channel_id
-            .say(&ctx.http, "You are not admin. Request denied.")
-            .await;
-        return;
-    }
-
-    // Clear conversation history for this channel
-    clear_conversation_history(channel_id).await;
-
-    // Send confirmation message
-    if let Err(why) = discord::say(ctx, channel_id, "Conversation history has been cleared.").await
-    {
-        tracing::error!("Error sending confirmation message: {:?}", why);
-    }
-}
-
-/// Handles the model change command from authorized users
-async fn handle_model_command(
-    ctx: &Context,
-    channel_id: ChannelId,
-    author_id: UserId,
-    model_name: &str,
-) {
-    // Only allow the developer to change the model
-    if author_id != **DEV_USER_ID {
-        let _ = channel_id
-            .say(&ctx.http, "You are not admin. Request denied.")
-            .await;
-        return;
-    }
-
-    // Trim the model name and check if it's empty
-    let model_name = model_name.trim();
-    if model_name.is_empty() {
-        let _ = channel_id
-            .say(&ctx.http, "Please specify a model name.")
-            .await;
-        return;
-    }
-
-    // Change the model and get the response
-    let response = change_model(model_name).await;
-
-    // Send the response
-    let _ = channel_id.say(&ctx.http, response).await;
-}
-
-/// Handles the developer message command
-async fn handle_dev_command(
-    ctx: &Context,
-    channel_id: ChannelId,
-    author_id: UserId,
-    dev_message: &str,
-) {
-    // Only allow the developer to send developer messages
-    if author_id != **DEV_USER_ID {
-        let _ = channel_id
-            .say(&ctx.http, "You are not admin. Request denied.")
-            .await;
-        return;
-    }
-
-    // Trim the developer message and check if it's empty
-    let dev_message = dev_message.trim();
-    if dev_message.is_empty() {
-        let _ = channel_id
-            .say(&ctx.http, "Please specify a developer message.")
-            .await;
-        return;
-    }
-
-    // Add the developer message to the conversation history
-    let mut manager = CONVERSATION_MANAGER.lock().await;
-    manager.add_message(channel_id, ChatMessage::developer(dev_message.to_string()));
-    drop(manager); // Release the lock
-
-    // Send confirmation
-    let _ = channel_id
-        .say(
-            &ctx.http,
-            "Developer message added to conversation history.",
-        )
-        .await;
 }
 
 /// Process a message that mentions the bot and send a response
@@ -199,45 +110,20 @@ impl EventHandler for MintyBotHandler {
 
         if is_mentioned || contains_text_mention {
             // Create message context info
-            let msg_ctx = MsgContextInfo::from_channel_id(&ctx, msg.channel_id).await;
+            let msg_ctx = MsgContextInfo::from_message(&ctx, &msg).await;
 
             // Send a typing indicator while processing
             let _ = msg.channel_id.broadcast_typing(&ctx.http).await;
 
-            // Check if this is a forget command
-            if content_without_mention.trim() == "<forget>" {
-                handle_forget_command(&ctx, msg.channel_id, author.id).await;
-                return;
-            }
-
-            // Check if this is a model change command
-            if let Some(model_name) = content_without_mention.trim().strip_prefix("<model>") {
-                handle_model_command(&ctx, msg.channel_id, author.id, model_name).await;
-                return;
-            }
-
-            // Check if this is a developer message command
-            if let Some(dev_message) = content_without_mention.trim().strip_prefix("<dev>") {
-                handle_dev_command(&ctx, msg.channel_id, author.id, dev_message).await;
-                return;
-            }
-
             // Log the received message
             tracing::info!("Received mention with message: {}", content_without_mention);
 
-            let nick = if let Some(guild_id) = msg_ctx.guild_id {
-                author.nick_in(&ctx.http, guild_id).await
-            } else {
-                None
-            };
-            let global_name = author.global_name;
-            let name = Some(author.name);
+            // Check if this is an admin command and process it if so
+            if process_admin_command(&ctx, &msg, &msg_ctx, &content_without_mention).await {
+                return;
+            }
 
-            let selected_name = vec![nick, global_name, name]
-                .into_iter()
-                .find(|opt| opt.is_some())
-                .flatten()
-                .unwrap();
+            let selected_name = get_best_name_of_author(&ctx, &msg_ctx).await;
 
             // Process the mention and send a response
             process_bot_mention(&ctx, &msg_ctx, content_without_mention, selected_name).await;
@@ -269,6 +155,21 @@ async fn notify_bot_startup(ctx: &Context, bot_name: &str) {
     if let Err(err) = discord::send_dm_to_dev(ctx, &startup_message).await {
         tracing::error!("Failed to send startup notification: {:?}", err);
     }
+}
+
+async fn get_best_name_of_author(ctx: &Context, msg_ctx: &MsgContextInfo) -> String {
+    let nick = match msg_ctx.guild_id {
+        Some(guild_id) => msg_ctx.author.nick_in(&ctx.http, guild_id).await,
+        None => None,
+    };
+    let display_name = msg_ctx.author.global_name.clone();
+    let user_name = Some(msg_ctx.author.name.clone());
+
+    vec![nick, display_name, user_name]
+        .into_iter()
+        .find(|opt| opt.is_some())
+        .flatten()
+        .unwrap()
 }
 
 /// Spawn periodic background tasks
@@ -307,6 +208,15 @@ async fn main() -> eyre::Result<()> {
     // Initialize the tracing subscriber for logging
     tracing_subscriber::fmt::init();
 
+    // Load the bot state from disk
+    if let Err(e) = load_state().await {
+        tracing::error!("Failed to load bot state: {}", e);
+        // Continue with default state if loading fails
+    }
+
+    // Set up a clean shutdown handler to save state when the bot is terminated
+    setup_shutdown_handler();
+
     // Set gateway intents, which decides what events the bot will be notified about
     let intents = GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT;
 
@@ -316,6 +226,10 @@ async fn main() -> eyre::Result<()> {
     // Start the client and handle any errors
     if let Err(why) = client.start().await {
         tracing::error!("Client error: {:?}", why);
+        // Save state before exiting due to error
+        if let Err(e) = save_state().await {
+            tracing::error!("Failed to save state on shutdown: {}", e);
+        }
         return Err(eyre::eyre!("Client error: {:?}", why));
     }
 
@@ -328,4 +242,41 @@ async fn create_discord_client(intents: GatewayIntents) -> eyre::Result<Client> 
         .event_handler(MintyBotHandler {})
         .await
         .map_err(|e| eyre::eyre!("Failed to create Discord client: {}", e))
+}
+
+/// Set up a clean shutdown handler to save state when the bot is terminated
+fn setup_shutdown_handler() {
+    // Use tokio's signal handling to catch termination signals
+    tokio::spawn(async {
+        // Create a future that completes when SIGINT or SIGTERM is received
+        let ctrl_c = async {
+            tokio::signal::ctrl_c()
+                .await
+                .expect("Failed to install Ctrl+C handler");
+        };
+
+        let terminate = async {
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                .expect("Failed to install signal handler")
+                .recv()
+                .await;
+        };
+
+        // Wait for either signal
+        tokio::select! {
+            _ = ctrl_c => {},
+            _ = terminate => {},
+        }
+
+        // Save state before shutting down
+        tracing::info!("Received shutdown signal, saving state...");
+        if let Err(e) = save_state().await {
+            tracing::error!("Failed to save state on shutdown: {}", e);
+        } else {
+            tracing::info!("State saved successfully, shutting down.");
+        }
+
+        // Exit the process
+        std::process::exit(0);
+    });
 }
