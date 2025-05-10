@@ -1,5 +1,5 @@
 use lazy_static::lazy_static;
-use reqwest::Client;
+use reqwest::{Client, Response};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Instant;
@@ -85,7 +85,7 @@ async fn send_chat_completion_request(messages: Vec<ChatMessage>) -> eyre::Resul
 }
 
 /// Process the response from OpenAI API
-async fn process_openai_response(response: reqwest::Response) -> eyre::Result<String> {
+async fn process_openai_response(response: Response) -> eyre::Result<String> {
     if !response.status().is_success() {
         let error_text = response.text().await?;
         return Err(eyre::eyre!("OpenAI API error: {}", error_text));

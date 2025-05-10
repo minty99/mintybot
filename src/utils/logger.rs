@@ -91,7 +91,7 @@ pub async fn log_openai_conversation(
     msg_ctx: &MsgContextInfo,
     messages: &[ChatMessage],
     response: &str,
-    duration: std::time::Duration,
+    duration: Duration,
 ) -> std::io::Result<()> {
     let logger = LOGGER.lock().await;
     logger.log_openai_conversation(msg_ctx, messages, response, duration)
