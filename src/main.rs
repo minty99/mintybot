@@ -1,20 +1,18 @@
 #![feature(let_chains)]
 
-mod utils;
-
 use serenity::model::id::{ChannelId, UserId};
 use serenity::{async_trait, model::channel::Message, model::gateway::Ready, prelude::*};
 use std::future::Future;
 use std::sync::Arc;
 use tokio::time::{Duration, sleep};
 
-use utils::conversation::{CONVERSATION_MANAGER, clear_conversation_history};
-use utils::conversation::{ChatMessage, add_user_message};
-use utils::discord;
-use utils::msg_context::MsgContextInfo;
-use utils::openai::{change_model, get_chatgpt_response};
-use utils::statics::DEV_USER_ID;
-use utils::statics::DISCORD_TOKEN;
+use mintybot::conversation::{CONVERSATION_MANAGER, clear_conversation_history};
+use mintybot::conversation::{ChatMessage, add_user_message};
+use mintybot::discord;
+use mintybot::msg_context::MsgContextInfo;
+use mintybot::openai::{change_model, get_chatgpt_response};
+use mintybot::statics::DEV_USER_ID;
+use mintybot::statics::DISCORD_TOKEN;
 
 /// Handles bot mention detection and content processing
 async fn handle_bot_mentions(ctx: &Context, msg: &Message) -> (bool, String) {
