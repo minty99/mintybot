@@ -7,6 +7,7 @@ use std::time::Duration;
 use tokio::sync::Mutex;
 
 use crate::utils::conversation::ChatMessage;
+use crate::utils::openai_schema::ResponsesUsage;
 
 use super::msg_context::MsgContextInfo;
 
@@ -44,6 +45,7 @@ impl Logger {
         messages: &[ChatMessage],
         response: &str,
         duration: Duration,
+        token_usage: ResponsesUsage,
     ) -> std::io::Result<()> {
         // Create KST timezone (UTC+9)
         let kst = FixedOffset::east_opt(9 * 3600).unwrap();
@@ -77,6 +79,13 @@ impl Logger {
         }
         writeln!(file, "Timestamp: {timestamp}")?;
         writeln!(file, "API Call Duration: {duration:.2?}")?;
+
+        writeln!(
+            file,
+            "Token Usage: Input: {}, Output: {}, Total: {}",
+            token_usage.input_tokens, token_usage.output_tokens, token_usage.total_tokens
+        )?;
+
         writeln!(
             file,
             "====================================================="
@@ -104,7 +113,8 @@ pub async fn log_openai_conversation(
     messages: &[ChatMessage],
     response: &str,
     duration: Duration,
+    token_usage: ResponsesUsage,
 ) -> std::io::Result<()> {
     let logger = LOGGER.lock().await;
-    logger.log_openai_conversation(msg_ctx, messages, response, duration)
+    logger.log_openai_conversation(msg_ctx, messages, response, duration, token_usage)
 }

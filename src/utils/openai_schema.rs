@@ -1,6 +1,6 @@
-use serde::{Deserialize, Serialize};
 use crate::utils::conversation::ChatMessage;
 use crate::utils::persistence::get_current_model;
+use serde::{Deserialize, Serialize};
 
 /// Request structure for OpenAI Responses API
 #[derive(Debug, Serialize)]
@@ -59,7 +59,7 @@ pub enum ContentItem {
 }
 
 /// Token usage information
-#[derive(Debug, Deserialize)]
+#[derive(Copy, Clone, Debug, Deserialize)]
 pub struct ResponsesUsage {
     pub input_tokens: u32,
     #[serde(rename = "input_tokens_details.cached_tokens")]

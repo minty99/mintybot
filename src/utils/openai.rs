@@ -15,11 +15,13 @@ pub async fn get_openai_response(msg_ctx: &MsgContextInfo) -> eyre::Result<Strin
 
     // Create and send the request to OpenAI, measuring the time it takes
     let start_time = Instant::now();
-    let response_content = send_responses_api_request(history.clone()).await?;
+    let (response_content, token_usage) = send_responses_api_request(history.clone()).await?;
     let duration = start_time.elapsed();
 
     // Log the conversation (request and response)
-    if let Err(e) = log_openai_conversation(msg_ctx, &history, &response_content, duration).await {
+    if let Err(e) =
+        log_openai_conversation(msg_ctx, &history, &response_content, duration, token_usage).await
+    {
         tracing::error!("Failed to log OpenAI conversation: {e}");
     }
 
@@ -31,7 +33,9 @@ pub async fn get_openai_response(msg_ctx: &MsgContextInfo) -> eyre::Result<Strin
 }
 
 /// Send a request to the OpenAI Responses API
-async fn send_responses_api_request(messages: Vec<ChatMessage>) -> eyre::Result<String> {
+async fn send_responses_api_request(
+    messages: Vec<ChatMessage>,
+) -> eyre::Result<(String, ResponsesUsage)> {
     let client = Client::new();
     let request = ResponsesRequest::new(messages).await;
 
@@ -47,7 +51,7 @@ async fn send_responses_api_request(messages: Vec<ChatMessage>) -> eyre::Result<
 }
 
 /// Process the response from OpenAI API
-async fn process_openai_response(response: Response) -> eyre::Result<String> {
+async fn process_openai_response(response: Response) -> eyre::Result<(String, ResponsesUsage)> {
     if !response.status().is_success() {
         let error_text = response.text().await?;
         return Err(eyre::eyre!("OpenAI API error: {}", error_text));
@@ -94,7 +98,8 @@ async fn process_openai_response(response: Response) -> eyre::Result<String> {
         })
         .ok_or_else(|| eyre::eyre!("No valid text response from OpenAI"))?;
 
-    Ok(content)
+    // Return both the content and the token usage
+    Ok((content, response_data.usage))
 }
 
 #[cfg(test)]
@@ -137,10 +142,20 @@ mod tests {
         // Verify the result
         assert!(result.is_ok(), "API request failed: {:?}", result.err());
 
-        let response = result.unwrap();
+        let (response, token_usage) = result.unwrap();
 
         // Verify response is not empty
         assert!(!response.is_empty(), "Response from OpenAI was empty");
+
+        // Check token usage values
+        assert!(
+            token_usage.input_tokens > 0,
+            "Input tokens should be greater than 0"
+        );
+        assert!(
+            token_usage.output_tokens > 0,
+            "Output tokens should be greater than 0"
+        );
 
         // Check if response mentions 'Seoul' (capital of South Korea)
         assert!(
