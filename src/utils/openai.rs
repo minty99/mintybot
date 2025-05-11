@@ -191,12 +191,11 @@ mod tests {
             ChatMessage {
                 role: "system".to_string(),
                 content: "You are a helpful assistant.".to_string(),
-                name: None,
             },
             // Add a user message
             ChatMessage::user(
                 "Hello, what is the capital of South Korea?".to_string(),
-                None,
+                "user".to_string(),
             ),
         ];
 

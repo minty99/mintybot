@@ -96,7 +96,7 @@ async fn process_bot_mention(
     name: String,
 ) {
     // Add the user's message to the conversation history
-    let message = ChatMessage::user(content.clone(), Some(name));
+    let message = ChatMessage::user(content.clone(), name);
     add_message(msg_ctx.channel_id, message).await;
 
     // Send the message to ChatGPT and handle the response
