@@ -13,7 +13,7 @@ use serenity::model::id::ChannelId;
 
 // Constants
 const DEFAULT_MODEL: &str = "gpt-4.1";
-const DEFAULT_MAX_HISTORY: usize = 100;
+const MAX_HISTORY_COUNT: usize = 300;
 const STATE_FILE_PATH: &str = "data/bot_state.json";
 const STATE_DIR_PATH: &str = "data";
 const CURRENT_STATE_VERSION: u32 = 2;
@@ -59,13 +59,6 @@ impl BotPersonality {
     }
 }
 
-// Display trait is now automatically implemented by strum_macros::Display
-
-// Helper functions for serde defaults
-fn default_max_history() -> usize {
-    DEFAULT_MAX_HISTORY
-}
-
 fn default_personality() -> BotPersonality {
     BotPersonality::Normal
 }
@@ -82,10 +75,6 @@ pub struct BotState {
     /// Version of the state format for future compatibility
     pub version: u32,
 
-    /// Maximum number of messages to keep per channel
-    #[serde(default = "default_max_history")]
-    pub max_history_length: usize,
-
     /// Default personality for channels without a specific one set
     #[serde(default = "default_personality")]
     pub default_personality: BotPersonality,
@@ -101,7 +90,6 @@ impl Default for BotState {
             current_model: DEFAULT_MODEL.to_string(),
             conversations: HashMap::new(),
             version: CURRENT_STATE_VERSION,
-            max_history_length: DEFAULT_MAX_HISTORY,
             default_personality: BotPersonality::Normal,
             channel_personalities: HashMap::new(),
         }
@@ -153,7 +141,7 @@ impl BotState {
         history.push_back(message);
 
         // Trim if needed - with VecDeque we can efficiently remove from the front
-        while history.len() > self.max_history_length {
+        while history.len() > MAX_HISTORY_COUNT {
             history.pop_front();
         }
     }
