@@ -1,80 +1,12 @@
 use reqwest::{Client, Response};
-use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
 use crate::utils::conversation::ChatMessage;
 use crate::utils::logger::log_openai_conversation;
 use crate::utils::msg_context::MsgContextInfo;
-use crate::utils::persistence::get_current_model;
+use crate::utils::openai_schema::*;
 use crate::utils::persistence::{add_message, get_conversation_history};
 use crate::utils::statics::OPENAI_TOKEN;
-
-// Responses API Request and Response structures
-#[derive(Debug, Serialize)]
-struct ResponsesRequest {
-    model: String,
-    input: Vec<ChatMessage>,
-}
-
-impl ResponsesRequest {
-    async fn new(messages: Vec<ChatMessage>) -> Self {
-        let model = get_current_model().await;
-        Self {
-            model,
-            input: messages,
-        }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(tag = "type")]
-enum OutputItem {
-    #[serde(rename = "message")]
-    Message(MessageOutput),
-    #[serde(other)]
-    Other,
-}
-
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-struct MessageOutput {
-    id: String,
-    status: String,
-    role: String, // always "assistant"
-    content: Vec<ContentItem>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(tag = "type")]
-enum ContentItem {
-    #[serde(rename = "output_text")]
-    Text { text: String },
-    #[serde(other)]
-    Other,
-}
-
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-struct OpenAiResponse {
-    id: String,
-    output: Vec<OutputItem>,
-    usage: ResponsesUsage,
-}
-
-#[derive(Debug, Deserialize)]
-struct ResponsesUsage {
-    input_tokens: u32,
-    input_tokens_details: TokenDetails,
-    output_tokens: u32,
-    output_tokens_details: TokenDetails,
-    total_tokens: u32,
-}
-
-#[derive(Debug, Deserialize)]
-struct TokenDetails {
-    cached_tokens: u32,
-    reasoning_tokens: u32,
-}
 
 /// Get a response from OpenAI for the conversation in the specified channel
 pub async fn get_openai_response(msg_ctx: &MsgContextInfo) -> eyre::Result<String> {
@@ -125,15 +57,14 @@ async fn process_openai_response(response: Response) -> eyre::Result<String> {
     tracing::debug!("OpenAI response: {:#?}", response_data);
 
     // Log token usage information
+    let usage = &response_data.usage;
     tracing::info!(
-        "Token usage - Input: {} ({} cached, {} reasoning), Output: {} ({} cached, {} reasoning), Total: {}",
-        response_data.usage.input_tokens,
-        response_data.usage.input_tokens_details.cached_tokens,
-        response_data.usage.input_tokens_details.reasoning_tokens,
-        response_data.usage.output_tokens,
-        response_data.usage.output_tokens_details.cached_tokens,
-        response_data.usage.output_tokens_details.reasoning_tokens,
-        response_data.usage.total_tokens
+        "Token usage - Input: {} ({} cached), Output: {} ({} reasoning), Total: {}",
+        usage.input_tokens,
+        usage.cached_tokens,
+        usage.output_tokens,
+        usage.reasoning_tokens,
+        usage.total_tokens
     );
 
     // Find the first message output and extract its text content

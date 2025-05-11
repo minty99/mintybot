@@ -4,6 +4,7 @@ pub mod discord;
 pub mod logger;
 pub mod msg_context;
 pub mod openai;
+pub mod openai_schema;
 pub mod persistence;
 pub mod statics;
 pub mod web;
