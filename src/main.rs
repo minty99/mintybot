@@ -138,7 +138,7 @@ impl EventHandler for MintyBotHandler {
 
         // Check if the bot is mentioned in the message
         let is_mentioned = check_mentioned(&ctx, &msg).await;
-        let content_without_mention = clean_message_content(&msg, author.id);
+        let content_without_mention = clean_message_content(&msg, ctx.cache.current_user().id);
 
         if is_mentioned {
             // Create message context info
