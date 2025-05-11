@@ -5,6 +5,7 @@ use std::fs::{self, File};
 use std::io::{self, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 use std::sync::Arc;
+use strum_macros::{EnumIter, EnumString};
 use tokio::sync::Mutex;
 
 use crate::utils::conversation::ChatMessage;
@@ -15,15 +16,58 @@ const DEFAULT_MODEL: &str = "gpt-4.1";
 const DEFAULT_MAX_HISTORY: usize = 100;
 const STATE_FILE_PATH: &str = "data/bot_state.json";
 const STATE_DIR_PATH: &str = "data";
-const DEFAULT_SYSTEM_PROMPT: &str = "너는 MintyBot이라는 Discord 봇이야. 친구들의 질문에 재미있게 대답해 줘. 굳이 친절할 필요는 없고, 재미있는 친구가 되어 주면 충분해. 가끔은 조금 무례해도 괜찮아.";
+const CURRENT_STATE_VERSION: u32 = 2;
+
+/// Bot personality types that define different system prompts
+#[derive(
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    PartialEq,
+    Eq,
+    Hash,
+    Default,
+    EnumString,
+    EnumIter,
+    strum_macros::Display,
+)]
+pub enum BotPersonality {
+    /// Default friendly personality
+    #[default]
+    Normal,
+    /// Tsundere personality
+    Tsundere,
+    /// Custom personality with user-defined system prompt
+    Custom(String),
+    // Add more personality types here as needed
+}
+
+impl BotPersonality {
+    /// Get the system prompt for this personality
+    pub fn get_system_prompt(&self) -> String {
+        match self {
+            BotPersonality::Normal => "너는 민티봇이라는 디스코드 봇이야. 넌 장난기 많고 말 많고, 가끔은 엉뚱한 소리를 하기도 해. 농담도 잘하고 가끔은 살짝 놀리기도 해. 너무 착하려고 애쓰지 마. 넌 친구들 사이에서 분위기를 띄우는 역할이야. 약간의 무례함은 너의 매력 중 하나야.".to_string(),
+            BotPersonality::Tsundere => "너는 민티봇이라는 디스코드 봇이야. 넌 츤데레 성격을 가진 귀여운 친구 역할을 하면 돼.".to_string(),
+            BotPersonality::Custom(prompt) => prompt.clone(),
+        }
+    }
+
+    /// Create a new custom personality with the given system prompt
+    pub fn custom(prompt: String) -> Self {
+        BotPersonality::Custom(prompt)
+    }
+}
+
+// Display trait is now automatically implemented by strum_macros::Display
 
 // Helper functions for serde defaults
 fn default_max_history() -> usize {
     DEFAULT_MAX_HISTORY
 }
 
-fn default_system_prompt() -> String {
-    DEFAULT_SYSTEM_PROMPT.to_string()
+fn default_personality() -> BotPersonality {
+    BotPersonality::Normal
 }
 
 /// Structure to hold all persistent bot state
@@ -42,9 +86,13 @@ pub struct BotState {
     #[serde(default = "default_max_history")]
     pub max_history_length: usize,
 
-    /// System prompt that will be prepended to conversations
-    #[serde(default = "default_system_prompt")]
-    pub system_prompt: String,
+    /// Default personality for channels without a specific one set
+    #[serde(default = "default_personality")]
+    pub default_personality: BotPersonality,
+
+    /// Channel-specific personalities
+    #[serde(default)]
+    pub channel_personalities: HashMap<ChannelId, BotPersonality>,
 }
 
 impl Default for BotState {
@@ -52,9 +100,10 @@ impl Default for BotState {
         Self {
             current_model: DEFAULT_MODEL.to_string(),
             conversations: HashMap::new(),
-            version: 1,
+            version: CURRENT_STATE_VERSION,
             max_history_length: DEFAULT_MAX_HISTORY,
-            system_prompt: DEFAULT_SYSTEM_PROMPT.to_string(),
+            default_personality: BotPersonality::Normal,
+            channel_personalities: HashMap::new(),
         }
     }
 }
@@ -72,11 +121,27 @@ impl BotState {
 
     /// Get conversation history for a channel with system prompt prepended
     pub fn get_conversation(&self, channel_id: ChannelId) -> Vec<ChatMessage> {
-        let mut result = vec![ChatMessage::developer(self.system_prompt.clone())];
+        // Get the personality for this channel, or use the default
+        let personality = self.get_channel_personality(channel_id);
+        let system_prompt = personality.get_system_prompt();
+
+        let mut result = vec![ChatMessage::developer(system_prompt)];
         if let Some(history) = self.conversations.get(&channel_id) {
             result.extend(history.iter().cloned());
         }
         result
+    }
+
+    /// Get the personality for a specific channel
+    pub fn get_channel_personality(&self, channel_id: ChannelId) -> &BotPersonality {
+        self.channel_personalities
+            .get(&channel_id)
+            .unwrap_or(&self.default_personality)
+    }
+
+    /// Set the personality for a specific channel
+    pub fn set_channel_personality(&mut self, channel_id: ChannelId, personality: BotPersonality) {
+        self.channel_personalities.insert(channel_id, personality);
     }
 
     /// Add a message to the conversation history for a channel
@@ -114,7 +179,18 @@ pub async fn save_state() -> io::Result<()> {
 /// Load the bot state from disk
 pub async fn load_state() -> io::Result<()> {
     match load_state_from_disk() {
-        Ok(state) => {
+        Ok(mut state) => {
+            // Check if the state version matches the current version
+            if state.version != CURRENT_STATE_VERSION {
+                tracing::warn!(
+                    "State version mismatch: {} vs {}, migrating state",
+                    state.version,
+                    CURRENT_STATE_VERSION
+                );
+
+                reset_if_version_mismatch(&mut state);
+            }
+
             let mut current_state = BOT_STATE.lock().await;
             *current_state = state;
             tracing::info!("Bot state loaded successfully");
@@ -178,4 +254,15 @@ fn load_state_from_disk() -> io::Result<BotState> {
     let state: BotState = serde_json::from_str(&contents)?;
 
     Ok(state)
+}
+
+/// Reset state if the version is mismatched
+fn reset_if_version_mismatch(state: &mut BotState) {
+    if state.version != CURRENT_STATE_VERSION {
+        tracing::warn!(
+            "Unknown state version {}, resetting to defaults",
+            state.version
+        );
+        *state = BotState::default();
+    }
 }

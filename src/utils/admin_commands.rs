@@ -1,13 +1,15 @@
 use serenity::model::channel::Message;
 use serenity::model::id::UserId;
 use serenity::prelude::*;
+use std::str::FromStr;
+use strum::IntoEnumIterator;
 
 use crate::conversation::{ChatMessage, clear_conversation_history};
 use crate::discord;
 use crate::msg_context::MsgContextInfo;
 use crate::openai::change_model;
 use crate::statics::DEV_USER_ID;
-use crate::utils::persistence::{BOT_STATE, save_state};
+use crate::utils::persistence::{BOT_STATE, BotPersonality, save_state};
 
 /// Enum representing different admin command types
 #[derive(Debug)]
@@ -16,6 +18,8 @@ pub enum AdminCommand {
     Model(String),
     Status,
     DevMessage(String),
+    GetPersonality,
+    SetPersonality(String),
 }
 
 /// Process an admin command if present in the message
@@ -48,6 +52,10 @@ pub async fn process_admin_command(
         AdminCommand::Model(model_name) => handle_model_command(ctx, msg_ctx, &model_name).await,
         AdminCommand::Status => handle_status_command(ctx, msg_ctx).await,
         AdminCommand::DevMessage(message) => handle_dev_command(ctx, msg_ctx, &message).await,
+        AdminCommand::GetPersonality => handle_get_personality_command(ctx, msg_ctx).await,
+        AdminCommand::SetPersonality(personality) => {
+            handle_set_personality_command(ctx, msg_ctx, &personality).await
+        }
     }
 
     true
@@ -71,6 +79,14 @@ fn parse_admin_command(content: &str) -> Option<AdminCommand> {
 
     if let Some(dev_message) = content.strip_prefix("<dev>") {
         return Some(AdminCommand::DevMessage(dev_message.trim().to_string()));
+    }
+
+    if content == "<personality>" {
+        return Some(AdminCommand::GetPersonality);
+    }
+
+    if let Some(personality) = content.strip_prefix("<personality>") {
+        return Some(AdminCommand::SetPersonality(personality.trim().to_string()));
     }
 
     None
@@ -125,6 +141,9 @@ async fn handle_status_command(ctx: &Context, msg_ctx: &MsgContextInfo) {
     // Get current model
     let current_model = &state.current_model;
 
+    // Get current personality for this channel
+    let personality = state.get_channel_personality(channel_id);
+
     // Get conversation history count for this channel
     let channel_history_count = state
         .conversations
@@ -146,6 +165,7 @@ async fn handle_status_command(ctx: &Context, msg_ctx: &MsgContextInfo) {
         "\
 **Bot Status**
 - Current model: `{current_model}`
+- Current personality: `{personality}`
 - This channel history: {channel_history_count} messages
 - Total history: {total_history_count} messages across {channel_count} channels",
     );
@@ -184,6 +204,109 @@ async fn handle_dev_command(ctx: &Context, msg_ctx: &MsgContextInfo, dev_message
         .say(
             &ctx.http,
             "Developer message added to conversation history.",
+        )
+        .await;
+}
+
+/// Handles the get personality command
+async fn handle_get_personality_command(ctx: &Context, msg_ctx: &MsgContextInfo) {
+    let channel_id = msg_ctx.channel_id;
+
+    // Get the current personality for this channel
+    let personality = {
+        let state = BOT_STATE.lock().await;
+        state.get_channel_personality(channel_id).clone()
+    };
+
+    // Get the system prompt for this personality
+    let system_prompt = personality.get_system_prompt();
+
+    // Format the message
+    let message = format!(
+        "**Current Personality**: `{personality}`\n\n**System Prompt**:\n```\n{system_prompt}\n```"
+    );
+
+    // Send the message
+    if let Err(why) = discord::say(ctx, channel_id, &message).await {
+        tracing::error!("Error sending personality info: {:?}", why);
+    }
+}
+
+/// Handles the set personality command
+async fn handle_set_personality_command(
+    ctx: &Context,
+    msg_ctx: &MsgContextInfo,
+    personality_input: &str,
+) {
+    let channel_id = msg_ctx.channel_id;
+
+    // Trim the personality input and check if it's empty
+    let personality_input = personality_input.trim();
+    if personality_input.is_empty() {
+        let _ = channel_id
+            .say(&ctx.http, "Please specify a personality name.")
+            .await;
+        return;
+    }
+
+    // Check for custom personality format: "custom <system prompt>"
+    let personality = if personality_input.to_lowercase().starts_with("custom ") {
+        // Extract the custom system prompt (everything after "custom ")
+        let custom_prompt = personality_input[7..].trim().to_string();
+
+        if custom_prompt.is_empty() {
+            let _ = channel_id
+                .say(&ctx.http, "Please provide a system prompt after 'custom'.")
+                .await;
+            return;
+        }
+
+        // Create a custom personality with the provided prompt
+        BotPersonality::custom(custom_prompt)
+    } else {
+        // Try to parse as a predefined personality
+        match BotPersonality::from_str(personality_input) {
+            Ok(p) => p,
+            Err(_) => {
+                // List all available personalities using EnumIter
+                let mut available_personalities: Vec<String> = BotPersonality::iter()
+                    .filter(|p| !matches!(p, BotPersonality::Custom(_))) // Filter out Custom
+                    .map(|p| p.to_string())
+                    .collect();
+
+                // Add custom option
+                available_personalities.push("Custom <system prompt>".to_string());
+
+                let _ = channel_id
+                    .say(
+                        &ctx.http,
+                        format!(
+                            "Unknown personality: {personality_input}\nAvailable personalities: {}",
+                            available_personalities.join(", ")
+                        ),
+                    )
+                    .await;
+                return;
+            }
+        }
+    };
+
+    // Set the personality for this channel
+    {
+        let mut state = BOT_STATE.lock().await;
+        state.set_channel_personality(channel_id, personality.clone());
+    }
+
+    // Save state
+    if let Err(e) = save_state().await {
+        tracing::error!("Failed to save state after personality change: {}", e);
+    }
+
+    // Send confirmation
+    let _ = channel_id
+        .say(
+            &ctx.http,
+            format!("Personality set to {personality} for this channel."),
         )
         .await;
 }
