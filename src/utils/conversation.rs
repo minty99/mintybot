@@ -12,7 +12,7 @@ impl Display for ChatMessage {
         let role_str = format!("<{}>", self.role);
         let content_str = self.content.to_string();
 
-        write!(f, "<{role_str}> {content_str}")
+        write!(f, "{role_str} {content_str}")
     }
 }
 
