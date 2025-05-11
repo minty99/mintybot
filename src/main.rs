@@ -99,20 +99,19 @@ async fn process_bot_mention(
     let message = ChatMessage::user(content.clone(), name);
     add_message(msg_ctx.channel_id, message).await;
 
-    // Send the message to ChatGPT and handle the response
+    // Send the message to OpenAI and handle the response
     match get_openai_response(msg_ctx).await {
         Ok(response) => {
             // Send the response back to Discord
             if let Err(why) = discord::say(ctx, msg_ctx.channel_id, &response).await {
-                tracing::error!("Error sending ChatGPT response: {:?}", why);
+                tracing::error!("Error sending OpenAI response: {:?}", why);
             }
         }
         Err(err) => {
-            tracing::error!("Error getting ChatGPT response: {:?}", err);
+            tracing::error!("Error getting OpenAI response: {:?}", err);
             // Send an error message to the channel
-            let error_message = format!(
-                "Sorry, I couldn't get a response from ChatGPT at the moment. Error: {err}"
-            );
+            let error_message =
+                format!("Sorry, I couldn't get a response from OpenAI at the moment. Error: {err}");
             if let Err(why) = discord::say(ctx, msg_ctx.channel_id, error_message).await {
                 tracing::error!("Error sending error message: {:?}", why);
             }
