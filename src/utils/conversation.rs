@@ -1,8 +1,5 @@
 use serde::{Deserialize, Serialize};
-use serenity::model::id::ChannelId;
 use std::fmt::Display;
-
-use crate::utils::persistence::{BOT_STATE, save_state};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
@@ -57,48 +54,4 @@ impl ChatMessage {
             name: None,
         }
     }
-}
-
-// Helper functions to interact with the global conversation manager
-
-/// Add a message to the persistent state
-async fn add_message_to_state(channel_id: ChannelId, message: ChatMessage) {
-    // Add to the persistent state
-    {
-        let mut state = BOT_STATE.lock().await;
-        state.add_message(channel_id, message);
-    }
-
-    // Save state
-    let _ = save_state().await;
-}
-
-/// Add a user message to the conversation history
-pub async fn add_user_message(channel_id: ChannelId, content: String, username: Option<String>) {
-    let message = ChatMessage::user(content, username);
-    add_message_to_state(channel_id, message).await;
-}
-
-/// Add an assistant message to the conversation history
-pub async fn add_assistant_message(channel_id: ChannelId, content: String) {
-    let message = ChatMessage::assistant(content);
-    add_message_to_state(channel_id, message).await;
-}
-
-/// Get the conversation history for a specific channel, including the system prompt
-pub async fn get_conversation_history(channel_id: ChannelId) -> Vec<ChatMessage> {
-    let state = BOT_STATE.lock().await;
-    state.get_conversation(channel_id)
-}
-
-/// Clear the conversation history for a specific channel
-pub async fn clear_conversation_history(channel_id: ChannelId) {
-    // Clear from persistent state
-    {
-        let mut state = BOT_STATE.lock().await;
-        state.remove_conversation(channel_id);
-    }
-
-    // Save state
-    let _ = save_state().await;
 }

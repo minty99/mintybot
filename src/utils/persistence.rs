@@ -114,17 +114,12 @@ impl Default for BotState {
 
 // Global state manager
 lazy_static! {
-    pub static ref BOT_STATE: Arc<Mutex<BotState>> = Arc::new(Mutex::new(BotState::default()));
+    static ref BOT_STATE: Arc<Mutex<BotState>> = Arc::new(Mutex::new(BotState::default()));
 }
 
 impl BotState {
-    /// Create a new bot state
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     /// Get conversation history for a channel with system prompt prepended
-    pub fn get_conversation(&self, channel_id: ChannelId) -> Vec<ChatMessage> {
+    fn get_conversation(&self, channel_id: ChannelId) -> Vec<ChatMessage> {
         // Get the personality for this channel, or use the default
         let personality = self.get_channel_personality(channel_id);
         let system_prompt = personality.get_system_prompt();
@@ -137,19 +132,19 @@ impl BotState {
     }
 
     /// Get the personality for a specific channel
-    pub fn get_channel_personality(&self, channel_id: ChannelId) -> &BotPersonality {
+    fn get_channel_personality(&self, channel_id: ChannelId) -> &BotPersonality {
         self.channel_personalities
             .get(&channel_id)
             .unwrap_or(&self.default_personality)
     }
 
     /// Set the personality for a specific channel
-    pub fn set_channel_personality(&mut self, channel_id: ChannelId, personality: BotPersonality) {
+    fn set_channel_personality(&mut self, channel_id: ChannelId, personality: BotPersonality) {
         self.channel_personalities.insert(channel_id, personality);
     }
 
     /// Add a message to the conversation history for a channel
-    pub fn add_message(&mut self, channel_id: ChannelId, message: ChatMessage) {
+    fn add_message(&mut self, channel_id: ChannelId, message: ChatMessage) {
         // Get or create the conversation history for this channel
         let history = self.conversations.entry(channel_id).or_default();
 
@@ -163,24 +158,19 @@ impl BotState {
     }
 
     /// Remove conversation history for a channel
-    pub fn remove_conversation(&mut self, channel_id: ChannelId) {
+    fn remove_conversation(&mut self, channel_id: ChannelId) {
         self.conversations.remove(&channel_id);
     }
 
-    /// Get all channel IDs with conversation history
-    pub fn get_channel_ids(&self) -> Vec<ChannelId> {
-        self.conversations.keys().cloned().collect()
-    }
-
     /// Change the model used for OpenAI API requests
-    pub fn change_model(&mut self, model_name: String) {
+    fn change_model(&mut self, model_name: String) {
         let old_model = self.current_model.clone();
         self.current_model = model_name;
         tracing::info!("Model changed from {} to {}", old_model, self.current_model);
     }
 
     /// Get the current model name
-    pub fn get_current_model(&self) -> String {
+    fn get_current_model(&self) -> String {
         self.current_model.clone()
     }
 }
@@ -283,7 +273,86 @@ fn reset_if_version_mismatch(state: &mut BotState) {
     }
 }
 
-/// Change the model used for OpenAI API requests (전역 래퍼 함수)
+/// Get conversation history for a channel with system prompt prepended
+pub async fn get_conversation_history(channel_id: ChannelId) -> Vec<ChatMessage> {
+    BOT_STATE.lock().await.get_conversation(channel_id)
+}
+
+/// Get the personality for a specific channel
+pub async fn get_channel_personality(channel_id: ChannelId) -> BotPersonality {
+    BOT_STATE
+        .lock()
+        .await
+        .get_channel_personality(channel_id)
+        .clone()
+}
+
+/// Set the personality for a specific channel
+pub async fn set_channel_personality(channel_id: ChannelId, personality: BotPersonality) {
+    let mut state = BOT_STATE.lock().await;
+    state.set_channel_personality(channel_id, personality);
+    drop(state); // 명시적으로 lock 해제
+
+    // 상태 저장
+    if let Err(e) = save_state().await {
+        tracing::error!(
+            "Failed to save state after setting channel personality: {}",
+            e
+        );
+    }
+}
+
+/// Add a message to the conversation history for a channel
+pub async fn add_message(channel_id: ChannelId, message: ChatMessage) {
+    let mut state = BOT_STATE.lock().await;
+    state.add_message(channel_id, message);
+    drop(state); // 명시적으로 lock 해제
+
+    // 상태 저장
+    if let Err(e) = save_state().await {
+        tracing::error!("Failed to save state after adding message: {}", e);
+    }
+}
+
+/// Remove conversation history for a channel
+pub async fn remove_conversation(channel_id: ChannelId) {
+    let mut state = BOT_STATE.lock().await;
+    state.remove_conversation(channel_id);
+    drop(state); // 명시적으로 lock 해제
+
+    // 상태 저장
+    if let Err(e) = save_state().await {
+        tracing::error!("Failed to save state after removing conversation: {}", e);
+    }
+}
+
+/// Get all channel IDs with conversation history
+pub async fn get_channel_ids() -> Vec<ChannelId> {
+    BOT_STATE
+        .lock()
+        .await
+        .conversations
+        .keys()
+        .cloned()
+        .collect()
+}
+
+/// Get the total count of messages across all channels
+pub async fn get_total_history_count() -> usize {
+    let state = BOT_STATE.lock().await;
+    let mut total_count = 0;
+
+    // 모든 채널에 대해 대화 내용을 순회하며 합산
+    for channel_id in state.conversations.keys() {
+        // 시스템 프롬프트(첫 번째 메시지)는 제외
+        let channel_messages = state.get_conversation(*channel_id);
+        total_count += channel_messages.len().saturating_sub(1); // 시스템 프롬프트 제외
+    }
+
+    total_count
+}
+
+/// Change the model used for OpenAI API requests
 pub async fn change_model(model_name: &str) -> String {
     let old_model;
 
@@ -302,7 +371,7 @@ pub async fn change_model(model_name: &str) -> String {
     format!("Model changed from {old_model} to {model_name}")
 }
 
-/// Get the current model name (전역 래퍼 함수)
+/// Get the current model name
 pub async fn get_current_model() -> String {
     BOT_STATE.lock().await.get_current_model()
 }

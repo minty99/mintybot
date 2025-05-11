@@ -4,11 +4,16 @@ use serenity::prelude::*;
 use std::str::FromStr;
 use strum::IntoEnumIterator;
 
-use crate::conversation::{ChatMessage, clear_conversation_history};
 use crate::discord;
 use crate::msg_context::MsgContextInfo;
 use crate::statics::DEV_USER_ID;
-use crate::utils::persistence::{BOT_STATE, BotPersonality, change_model, save_state};
+use crate::utils::conversation::ChatMessage;
+use crate::utils::persistence::{
+    BotPersonality, add_message, change_model, get_channel_personality, get_conversation_history,
+    get_current_model, get_total_history_count, remove_conversation, set_channel_personality,
+};
+
+use super::persistence::get_channel_ids;
 
 /// Enum representing different admin command types
 #[derive(Debug)]
@@ -101,7 +106,7 @@ async fn handle_forget_command(ctx: &Context, msg_ctx: &MsgContextInfo) {
     let channel_id = msg_ctx.channel_id;
 
     // Clear conversation history for this channel
-    clear_conversation_history(channel_id).await;
+    remove_conversation(channel_id).await;
 
     // Send confirmation message
     if let Err(why) = discord::say(ctx, channel_id, "Conversation history has been cleared.").await
@@ -134,32 +139,17 @@ async fn handle_model_command(ctx: &Context, msg_ctx: &MsgContextInfo, model_nam
 async fn handle_status_command(ctx: &Context, msg_ctx: &MsgContextInfo) {
     let channel_id = msg_ctx.channel_id;
 
-    // Get the bot state
-    let state = BOT_STATE.lock().await;
+    let current_model = get_current_model().await;
+    let personality = get_channel_personality(channel_id).await;
 
-    // Get current model
-    let current_model = &state.current_model;
+    let channel_history = get_conversation_history(channel_id).await;
+    let channel_history_count = channel_history.len().saturating_sub(1); // exclude system prompt
 
-    // Get current personality for this channel
-    let personality = state.get_channel_personality(channel_id);
+    let channel_ids = get_channel_ids().await;
+    let channel_count = channel_ids.len();
 
-    // Get conversation history count for this channel
-    let channel_history_count = state
-        .conversations
-        .get(&channel_id)
-        .map_or(0, |history| history.len());
+    let total_history_count = get_total_history_count().await;
 
-    // Get total conversation history count across all channels
-    let total_history_count: usize = state
-        .conversations
-        .values()
-        .map(|history| history.len())
-        .sum();
-
-    // Count number of channels with conversation history
-    let channel_count = state.conversations.len();
-
-    // Format the status message
     let status_message = format!(
         "\
 **Bot Status**
@@ -169,7 +159,6 @@ async fn handle_status_command(ctx: &Context, msg_ctx: &MsgContextInfo) {
 - Total history: {total_history_count} messages across {channel_count} channels",
     );
 
-    // Send the status message
     if let Err(why) = discord::say(ctx, channel_id, &status_message).await {
         tracing::error!("Error sending status message: {:?}", why);
     }
@@ -190,13 +179,7 @@ async fn handle_dev_command(ctx: &Context, msg_ctx: &MsgContextInfo, dev_message
 
     // Add the developer message to the conversation history
     let dev_message = dev_message.to_string();
-    {
-        let mut state = BOT_STATE.lock().await;
-        state.add_message(channel_id, ChatMessage::developer(dev_message));
-    }
-
-    // Save state
-    let _ = save_state().await;
+    add_message(channel_id, ChatMessage::developer(dev_message)).await;
 
     // Send confirmation
     let _ = channel_id
@@ -212,10 +195,7 @@ async fn handle_get_personality_command(ctx: &Context, msg_ctx: &MsgContextInfo)
     let channel_id = msg_ctx.channel_id;
 
     // Get the current personality for this channel
-    let personality = {
-        let state = BOT_STATE.lock().await;
-        state.get_channel_personality(channel_id).clone()
-    };
+    let personality = get_channel_personality(channel_id).await;
 
     // Get the system prompt for this personality
     let system_prompt = personality.get_system_prompt();
@@ -291,15 +271,7 @@ async fn handle_set_personality_command(
     };
 
     // Set the personality for this channel
-    {
-        let mut state = BOT_STATE.lock().await;
-        state.set_channel_personality(channel_id, personality.clone());
-    }
-
-    // Save state
-    if let Err(e) = save_state().await {
-        tracing::error!("Failed to save state after personality change: {}", e);
-    }
+    set_channel_personality(channel_id, personality.clone()).await;
 
     // Send confirmation
     let _ = channel_id

@@ -10,12 +10,13 @@ use std::path::Path;
 use std::sync::Arc;
 use tokio::time::{Duration, sleep};
 
-use mintybot::conversation::add_user_message;
 use mintybot::discord;
 use mintybot::msg_context::MsgContextInfo;
 use mintybot::openai::get_chatgpt_response;
 use mintybot::statics::DISCORD_TOKEN;
 use mintybot::utils::admin_commands::process_admin_command;
+use mintybot::utils::conversation::ChatMessage;
+use mintybot::utils::persistence::add_message;
 use mintybot::utils::persistence::{load_state, save_state};
 
 fn clean_message_content(msg: &Message, user_id: UserId) -> String {
@@ -95,7 +96,8 @@ async fn process_bot_mention(
     name: String,
 ) {
     // Add the user's message to the conversation history
-    add_user_message(msg_ctx.channel_id, content.clone(), Some(name)).await;
+    let message = ChatMessage::user(content.clone(), Some(name));
+    add_message(msg_ctx.channel_id, message).await;
 
     // Send the message to ChatGPT and handle the response
     match get_chatgpt_response(msg_ctx).await {
@@ -267,7 +269,7 @@ fn acquire_instance_lock() -> eyre::Result<File> {
 async fn main() -> eyre::Result<()> {
     // Load .env file if present
     dotenv().ok();
-    
+
     // Initialize the tracing subscriber for logging
     tracing_subscriber::fmt::init();
 
