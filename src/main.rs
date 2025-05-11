@@ -22,14 +22,14 @@ use mintybot::utils::persistence::{load_state, save_state};
 fn clean_message_content(msg: &Message, user_id: UserId) -> String {
     let mut content = msg.content.clone();
 
-    // 봇 멘션 제거
+    // Remove bot mention
     let user_mention = format!("<@{user_id}>");
     let user_mention_nick = format!("<@!{user_id}>");
 
     content = content.replace(&user_mention, "");
     content = content.replace(&user_mention_nick, "");
 
-    // 역할 멘션 제거
+    // Remove role mentions
     for role in &msg.mention_roles {
         let role_mention = format!("<@&{role}>");
         content = content.replace(&role_mention, "");

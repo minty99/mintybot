@@ -291,9 +291,9 @@ pub async fn get_channel_personality(channel_id: ChannelId) -> BotPersonality {
 pub async fn set_channel_personality(channel_id: ChannelId, personality: BotPersonality) {
     let mut state = BOT_STATE.lock().await;
     state.set_channel_personality(channel_id, personality);
-    drop(state); // 명시적으로 lock 해제
+    drop(state); // Explicitly release the lock
 
-    // 상태 저장
+    // Save state
     if let Err(e) = save_state().await {
         tracing::error!(
             "Failed to save state after setting channel personality: {}",
@@ -306,9 +306,9 @@ pub async fn set_channel_personality(channel_id: ChannelId, personality: BotPers
 pub async fn add_message(channel_id: ChannelId, message: ChatMessage) {
     let mut state = BOT_STATE.lock().await;
     state.add_message(channel_id, message);
-    drop(state); // 명시적으로 lock 해제
+    drop(state); // Explicitly release the lock
 
-    // 상태 저장
+    // Save state
     if let Err(e) = save_state().await {
         tracing::error!("Failed to save state after adding message: {}", e);
     }
@@ -318,9 +318,9 @@ pub async fn add_message(channel_id: ChannelId, message: ChatMessage) {
 pub async fn remove_conversation(channel_id: ChannelId) {
     let mut state = BOT_STATE.lock().await;
     state.remove_conversation(channel_id);
-    drop(state); // 명시적으로 lock 해제
+    drop(state); // Explicitly release the lock
 
-    // 상태 저장
+    // Save state
     if let Err(e) = save_state().await {
         tracing::error!("Failed to save state after removing conversation: {}", e);
     }
@@ -342,11 +342,9 @@ pub async fn get_total_history_count() -> usize {
     let state = BOT_STATE.lock().await;
     let mut total_count = 0;
 
-    // 모든 채널에 대해 대화 내용을 순회하며 합산
     for channel_id in state.conversations.keys() {
-        // 시스템 프롬프트(첫 번째 메시지)는 제외
         let channel_messages = state.get_conversation(*channel_id);
-        total_count += channel_messages.len().saturating_sub(1); // 시스템 프롬프트 제외
+        total_count += channel_messages.len().saturating_sub(1); // Exclude system prompt
     }
 
     total_count
@@ -356,14 +354,14 @@ pub async fn get_total_history_count() -> usize {
 pub async fn change_model(model_name: &str) -> String {
     let old_model;
 
-    // 모델 변경
+    // Change model
     {
         let mut state = BOT_STATE.lock().await;
         old_model = state.get_current_model();
         state.change_model(model_name.to_string());
     }
 
-    // 상태 저장
+    // Save state
     if let Err(e) = save_state().await {
         tracing::error!("Failed to save state after model change: {}", e);
     }

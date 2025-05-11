@@ -18,7 +18,6 @@ struct ResponsesRequest {
 
 impl ResponsesRequest {
     async fn new(messages: Vec<ChatMessage>) -> Self {
-        // Get model from the global wrapper function
         let model = get_current_model().await;
         Self {
             model,
@@ -27,7 +26,6 @@ impl ResponsesRequest {
     }
 }
 
-// 출력 항목의 타입을 구분하는 Enum
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type")]
 enum OutputItem {
@@ -37,7 +35,6 @@ enum OutputItem {
     Other,
 }
 
-// message 타입의 출력 항목을 위한 구조체
 #[derive(Debug, Deserialize)]
 struct MessageOutput {
     _id: String,
@@ -46,7 +43,6 @@ struct MessageOutput {
     content: Vec<ContentItem>,
 }
 
-// content 항목을 위한 구조체
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type")]
 enum ContentItem {
