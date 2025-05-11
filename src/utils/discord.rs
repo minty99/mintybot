@@ -15,7 +15,7 @@ pub async fn say(ctx: &Context, channel: ChannelId, msg: impl Display) -> eyre::
     if content.len() <= DISCORD_MESSAGE_LIMIT {
         // Send as a single message if it's short enough
         match channel.say(&ctx.http, content).await {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(e) => {
                 tracing::error!("Failed to send message: {}", e);
                 return Err(eyre::eyre!("{}", e));
@@ -49,7 +49,7 @@ async fn send_chunked_message(
         // Send this chunk
         let chunk = &remaining[..actual_size];
         match channel.say(&ctx.http, chunk).await {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(e) => {
                 tracing::error!("Failed to send message chunk: {}", e);
                 return Err(eyre::eyre!("{}", e));

@@ -43,7 +43,8 @@ pub async fn process_admin_command(
             ctx,
             msg_ctx.channel_id,
             "You are not admin. Request denied.",
-        ).await;
+        )
+        .await;
         return false;
     }
 
@@ -169,7 +170,12 @@ async fn handle_dev_command(ctx: &Context, msg_ctx: &MsgContextInfo, dev_message
     add_message(channel_id, ChatMessage::developer(dev_message)).await;
 
     // Send confirmation
-    let _ = discord::say(ctx, channel_id, "Developer message added to conversation history.").await;
+    let _ = discord::say(
+        ctx,
+        channel_id,
+        "Developer message added to conversation history.",
+    )
+    .await;
 }
 
 /// Handles the get personality command
@@ -212,7 +218,12 @@ async fn handle_set_personality_command(
         let custom_prompt = personality_input[7..].trim().to_string();
 
         if custom_prompt.is_empty() {
-            let _ = discord::say(ctx, channel_id, "Please provide a system prompt after 'custom'.").await;
+            let _ = discord::say(
+                ctx,
+                channel_id,
+                "Please provide a system prompt after 'custom'.",
+            )
+            .await;
             return;
         }
 
@@ -232,10 +243,15 @@ async fn handle_set_personality_command(
                 // Add custom option
                 available_personalities.push("Custom <system prompt>".to_string());
 
-                let _ = discord::say(ctx, channel_id, format!(
-                    "Unknown personality: {personality_input}\nAvailable personalities: {}",
-                    available_personalities.join(", ")
-                )).await;
+                let _ = discord::say(
+                    ctx,
+                    channel_id,
+                    format!(
+                        "Unknown personality: {personality_input}\nAvailable personalities: {}",
+                        available_personalities.join(", ")
+                    ),
+                )
+                .await;
                 return;
             }
         }
@@ -245,5 +261,10 @@ async fn handle_set_personality_command(
     set_channel_personality(channel_id, personality.clone()).await;
 
     // Send confirmation
-    let _ = discord::say(ctx, channel_id, format!("Personality set to {personality} for this channel.")).await;
+    let _ = discord::say(
+        ctx,
+        channel_id,
+        format!("Personality set to {personality} for this channel."),
+    )
+    .await;
 }
