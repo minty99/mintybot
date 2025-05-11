@@ -5,10 +5,7 @@ use fs2::FileExt;
 use serenity::all::UserId;
 use serenity::{async_trait, model::channel::Message, model::gateway::Ready, prelude::*};
 use std::fs::File;
-use std::future::Future;
 use std::path::Path;
-use std::sync::Arc;
-use tokio::time::{Duration, sleep};
 
 use mintybot::discord;
 use mintybot::msg_context::MsgContextInfo;
@@ -174,9 +171,6 @@ impl EventHandler for MintyBotHandler {
 
         // Notify developer that the bot has started
         notify_bot_startup(&ctx, &bot_name).await;
-
-        // Here you could spawn background tasks if needed
-        // spawn_periodic_tasks(Arc::new(ctx));
     }
 }
 
@@ -201,37 +195,6 @@ async fn get_best_name_of_author(ctx: &Context, msg_ctx: &MsgContextInfo) -> Str
         .find(|opt| opt.is_some())
         .flatten()
         .unwrap()
-}
-
-/// Spawn periodic background tasks
-#[allow(dead_code)]
-fn spawn_periodic_tasks(_ctx: Arc<Context>) {
-    // Example: spawn a web watcher task
-    // spawn_periodic_task(ctx, web_watcher::watch_website, 3600);
-}
-
-#[allow(dead_code)]
-fn spawn_periodic_task<F, T, Fut>(ctx: Arc<Context>, f: F, period: u64)
-where
-    F: Fn(Arc<Context>, Option<T>) -> Fut + Send + Sync + 'static,
-    T: Clone + Send + Sync + 'static,
-    Fut: Future<Output = eyre::Result<T>> + Send,
-{
-    tokio::spawn(async move {
-        let mut prev_result = None;
-        loop {
-            let result = f(ctx.clone(), prev_result.clone()).await;
-            match result {
-                Ok(value) => {
-                    prev_result = Some(value);
-                }
-                Err(err) => {
-                    tracing::warn!("Error: {:?}", err);
-                }
-            }
-            sleep(Duration::from_secs(period)).await;
-        }
-    });
 }
 
 /// Acquire a file lock to ensure only one instance of the bot is running

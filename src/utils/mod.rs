@@ -8,4 +8,3 @@ pub mod openai_schema;
 pub mod persistence;
 pub mod statics;
 pub mod web;
-pub mod web_watcher;
