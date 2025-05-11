@@ -129,8 +129,6 @@ impl EventHandler for MintyBotHandler {
     async fn message(&self, ctx: Context, msg: Message) {
         let author = msg.author.clone();
 
-        tracing::debug!("Text: {:?}", msg);
-
         // Skip messages from bots
         if author.bot {
             return;
@@ -148,7 +146,7 @@ impl EventHandler for MintyBotHandler {
             let _ = msg.channel_id.broadcast_typing(&ctx.http).await;
 
             // Log the received message
-            tracing::info!("Received mention with message: {}", content_without_mention);
+            tracing::debug!("Request: {:#?}", msg);
 
             // Check if this is an admin command and process it if so
             if process_admin_command(&ctx, &msg, &msg_ctx, &content_without_mention).await {

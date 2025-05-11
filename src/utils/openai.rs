@@ -85,6 +85,7 @@ async fn process_openai_response(response: Response) -> eyre::Result<String> {
     }
 
     let completion: ChatCompletionResponse = response.json().await?;
+    tracing::debug!("OpenAI response: {:#?}", completion);
 
     completion
         .choices
