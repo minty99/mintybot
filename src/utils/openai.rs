@@ -93,26 +93,3 @@ async fn process_openai_response(response: Response) -> eyre::Result<String> {
         .map(|choice| choice.message.content.clone())
         .ok_or_else(|| eyre::eyre!("No response from ChatGPT"))
 }
-
-/// Change the model used for ChatGPT requests
-pub async fn change_model(model_name: &str) -> String {
-    // Update model in persistent state
-    let old_model;
-    {
-        let mut state = BOT_STATE.lock().await;
-        old_model = state.current_model.clone();
-        state.current_model = model_name.to_string();
-    }
-
-    // Save the state
-    if let Err(e) = save_state().await {
-        tracing::error!("Failed to save state after model change: {}", e);
-    }
-
-    format!("Model changed from {old_model} to {model_name}")
-}
-
-/// Get the current model name
-pub async fn get_current_model() -> String {
-    BOT_STATE.lock().await.current_model.clone()
-}

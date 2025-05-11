@@ -7,9 +7,8 @@ use strum::IntoEnumIterator;
 use crate::conversation::{ChatMessage, clear_conversation_history};
 use crate::discord;
 use crate::msg_context::MsgContextInfo;
-use crate::openai::change_model;
 use crate::statics::DEV_USER_ID;
-use crate::utils::persistence::{BOT_STATE, BotPersonality, save_state};
+use crate::utils::persistence::{BOT_STATE, BotPersonality, change_model, save_state};
 
 /// Enum representing different admin command types
 #[derive(Debug)]

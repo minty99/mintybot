@@ -171,6 +171,18 @@ impl BotState {
     pub fn get_channel_ids(&self) -> Vec<ChannelId> {
         self.conversations.keys().cloned().collect()
     }
+
+    /// Change the model used for OpenAI API requests
+    pub fn change_model(&mut self, model_name: String) {
+        let old_model = self.current_model.clone();
+        self.current_model = model_name;
+        tracing::info!("Model changed from {} to {}", old_model, self.current_model);
+    }
+
+    /// Get the current model name
+    pub fn get_current_model(&self) -> String {
+        self.current_model.clone()
+    }
 }
 
 /// Save the current bot state to disk
@@ -269,4 +281,28 @@ fn reset_if_version_mismatch(state: &mut BotState) {
         );
         *state = BotState::default();
     }
+}
+
+/// Change the model used for OpenAI API requests (전역 래퍼 함수)
+pub async fn change_model(model_name: &str) -> String {
+    let old_model;
+
+    // 모델 변경
+    {
+        let mut state = BOT_STATE.lock().await;
+        old_model = state.get_current_model();
+        state.change_model(model_name.to_string());
+    }
+
+    // 상태 저장
+    if let Err(e) = save_state().await {
+        tracing::error!("Failed to save state after model change: {}", e);
+    }
+
+    format!("Model changed from {old_model} to {model_name}")
+}
+
+/// Get the current model name (전역 래퍼 함수)
+pub async fn get_current_model() -> String {
+    BOT_STATE.lock().await.get_current_model()
 }
