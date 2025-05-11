@@ -1,4 +1,4 @@
-use dotenv::dotenv;
+use dotenvy::dotenv;
 use mintybot::statics::DISCORD_TOKEN;
 use mintybot::utils::discord;
 use serenity::async_trait;

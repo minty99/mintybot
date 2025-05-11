@@ -1,5 +1,6 @@
 #![feature(let_chains)]
 
+use dotenvy::dotenv;
 use fs2::FileExt;
 use serenity::all::UserId;
 use serenity::{async_trait, model::channel::Message, model::gateway::Ready, prelude::*};
@@ -264,6 +265,9 @@ fn acquire_instance_lock() -> eyre::Result<File> {
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
+    // Load .env file if present
+    dotenv().ok();
+    
     // Initialize the tracing subscriber for logging
     tracing_subscriber::fmt::init();
 
