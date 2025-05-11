@@ -12,7 +12,7 @@ use tokio::time::{Duration, sleep};
 
 use mintybot::discord;
 use mintybot::msg_context::MsgContextInfo;
-use mintybot::openai::get_chatgpt_response;
+use mintybot::openai::get_openai_response;
 use mintybot::statics::DISCORD_TOKEN;
 use mintybot::utils::admin_commands::process_admin_command;
 use mintybot::utils::conversation::ChatMessage;
@@ -100,7 +100,7 @@ async fn process_bot_mention(
     add_message(msg_ctx.channel_id, message).await;
 
     // Send the message to ChatGPT and handle the response
-    match get_chatgpt_response(msg_ctx).await {
+    match get_openai_response(msg_ctx).await {
         Ok(response) => {
             // Send the response back to Discord
             if let Err(why) = discord::say(ctx, msg_ctx.channel_id, &response).await {

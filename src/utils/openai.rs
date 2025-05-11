@@ -2,52 +2,91 @@ use reqwest::{Client, Response};
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
-use crate::utils::conversation::{ChatMessage, add_assistant_message, get_conversation_history};
+use crate::utils::conversation::ChatMessage;
 use crate::utils::logger::log_openai_conversation;
 use crate::utils::msg_context::MsgContextInfo;
-use crate::utils::persistence::{BOT_STATE, save_state};
+use crate::utils::persistence::get_current_model;
+use crate::utils::persistence::{add_message, get_conversation_history};
 use crate::utils::statics::OPENAI_TOKEN;
 
-// Model constants
-const DEFAULT_TEMPERATURE: f32 = 0.7;
-
+// Responses API Request and Response structures
 #[derive(Debug, Serialize)]
-struct ChatCompletionRequest {
+struct ResponsesRequest {
     model: String,
-    messages: Vec<ChatMessage>,
-    temperature: f32,
+    input: Vec<ChatMessage>,
 }
 
-impl ChatCompletionRequest {
+impl ResponsesRequest {
     async fn new(messages: Vec<ChatMessage>) -> Self {
-        // Get model from persistent state
-        let model = BOT_STATE.lock().await.current_model.clone();
+        // Get model from the global wrapper function
+        let model = get_current_model().await;
         Self {
             model,
-            messages,
-            temperature: DEFAULT_TEMPERATURE,
+            input: messages,
         }
     }
 }
 
+// 출력 항목의 타입을 구분하는 Enum
 #[derive(Debug, Deserialize)]
-struct ChatCompletionResponseChoice {
-    message: ChatMessage,
+#[serde(tag = "type")]
+enum OutputItem {
+    #[serde(rename = "message")]
+    Message(MessageOutput),
+    #[serde(other)]
+    Other,
+}
+
+// message 타입의 출력 항목을 위한 구조체
+#[derive(Debug, Deserialize)]
+struct MessageOutput {
+    _id: String,
+    status: String,
+    _role: String, // always "assistant"
+    content: Vec<ContentItem>,
+}
+
+// content 항목을 위한 구조체
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type")]
+enum ContentItem {
+    #[serde(rename = "output_text")]
+    Text { text: String },
+    #[serde(other)]
+    Other,
 }
 
 #[derive(Debug, Deserialize)]
-struct ChatCompletionResponse {
-    choices: Vec<ChatCompletionResponseChoice>,
+#[allow(dead_code)]
+struct OpenAiResponse {
+    id: String,
+    output: Vec<OutputItem>,
+    usage: ResponsesUsage,
 }
 
-/// Get a response from ChatGPT for the conversation in the specified channel
-pub async fn get_chatgpt_response(msg_ctx: &MsgContextInfo) -> eyre::Result<String> {
+#[derive(Debug, Deserialize)]
+struct ResponsesUsage {
+    input_tokens: u32,
+    input_tokens_details: TokenDetails,
+    output_tokens: u32,
+    output_tokens_details: TokenDetails,
+    total_tokens: u32,
+}
+
+#[derive(Debug, Deserialize)]
+struct TokenDetails {
+    cached_tokens: u32,
+    reasoning_tokens: u32,
+}
+
+/// Get a response from OpenAI for the conversation in the specified channel
+pub async fn get_openai_response(msg_ctx: &MsgContextInfo) -> eyre::Result<String> {
     // Get conversation history for this channel
     let history = get_conversation_history(msg_ctx.channel_id).await;
 
     // Create and send the request to OpenAI, measuring the time it takes
     let start_time = Instant::now();
-    let response_content = send_chat_completion_request(history.clone()).await?;
+    let response_content = send_responses_api_request(history.clone()).await?;
     let duration = start_time.elapsed();
 
     // Log the conversation (request and response)
@@ -56,18 +95,19 @@ pub async fn get_chatgpt_response(msg_ctx: &MsgContextInfo) -> eyre::Result<Stri
     }
 
     // Store the assistant's response in the conversation history
-    add_assistant_message(msg_ctx.channel_id, response_content.clone()).await;
+    let message = ChatMessage::assistant(response_content.clone());
+    add_message(msg_ctx.channel_id, message).await;
 
     Ok(response_content)
 }
 
-/// Send a chat completion request to the OpenAI API
-async fn send_chat_completion_request(messages: Vec<ChatMessage>) -> eyre::Result<String> {
+/// Send a request to the OpenAI Responses API
+async fn send_responses_api_request(messages: Vec<ChatMessage>) -> eyre::Result<String> {
     let client = Client::new();
-    let request = ChatCompletionRequest::new(messages).await;
+    let request = ResponsesRequest::new(messages).await;
 
     let response = client
-        .post("https://api.openai.com/v1/chat/completions")
+        .post("https://api.openai.com/v1/responses")
         .header("Authorization", format!("Bearer {}", *OPENAI_TOKEN))
         .header("Content-Type", "application/json")
         .json(&request)
@@ -84,12 +124,101 @@ async fn process_openai_response(response: Response) -> eyre::Result<String> {
         return Err(eyre::eyre!("OpenAI API error: {}", error_text));
     }
 
-    let completion: ChatCompletionResponse = response.json().await?;
-    tracing::debug!("OpenAI response: {:#?}", completion);
+    let response_data: OpenAiResponse = response.json().await?;
+    tracing::debug!("OpenAI response: {:#?}", response_data);
 
-    completion
-        .choices
-        .first()
-        .map(|choice| choice.message.content.clone())
-        .ok_or_else(|| eyre::eyre!("No response from ChatGPT"))
+    // Log token usage information
+    tracing::info!(
+        "Token usage - Input: {} ({} cached, {} reasoning), Output: {} ({} cached, {} reasoning), Total: {}",
+        response_data.usage.input_tokens,
+        response_data.usage.input_tokens_details.cached_tokens,
+        response_data.usage.input_tokens_details.reasoning_tokens,
+        response_data.usage.output_tokens,
+        response_data.usage.output_tokens_details.cached_tokens,
+        response_data.usage.output_tokens_details.reasoning_tokens,
+        response_data.usage.total_tokens
+    );
+
+    // Find the first message output and extract its text content
+    let content = response_data
+        .output
+        .iter()
+        .find_map(|item| {
+            if let OutputItem::Message(msg_output) = item {
+                // Find the first text content in the message
+                msg_output.content.iter().find_map(|content_item| {
+                    if msg_output.status != "completed" {
+                        tracing::warn!(
+                            "Message output status is not completed: {}",
+                            msg_output.status
+                        );
+                        return None;
+                    }
+                    if let ContentItem::Text { text, .. } = content_item {
+                        Some(text.clone())
+                    } else {
+                        None
+                    }
+                })
+            } else {
+                None
+            }
+        })
+        .ok_or_else(|| eyre::eyre!("No valid text response from OpenAI"))?;
+
+    Ok(content)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use dotenvy::dotenv;
+    use std::env;
+
+    #[tokio::test]
+    #[ignore = "This test calls the OpenAI API, which incurs a cost. It is ignored by default to avoid incurring a cost without intent."]
+    async fn test_send_responses_api_request() {
+        tracing_subscriber::fmt::init();
+
+        // Initialize environment variables from .env file
+        dotenv().ok();
+
+        // Check if API key is available
+        let token_var = env::var("MINTYBOT_OPENAI_TOKEN");
+        if token_var.is_err() || token_var.as_ref().unwrap().is_empty() {
+            panic!("MINTYBOT_OPENAI_TOKEN not set or empty.");
+        }
+
+        // Create a test conversation
+        let messages = vec![
+            // Create system message
+            ChatMessage {
+                role: "system".to_string(),
+                content: "You are a helpful assistant.".to_string(),
+                name: None,
+            },
+            // Add a user message
+            ChatMessage::user(
+                "Hello, what is the capital of South Korea?".to_string(),
+                None,
+            ),
+        ];
+
+        // Send the actual API request
+        let result = send_responses_api_request(messages).await;
+
+        // Verify the result
+        assert!(result.is_ok(), "API request failed: {:?}", result.err());
+
+        let response = result.unwrap();
+
+        // Verify response is not empty
+        assert!(!response.is_empty(), "Response from OpenAI was empty");
+
+        // Check if response mentions 'Seoul' (capital of South Korea)
+        assert!(
+            response.to_lowercase().contains("seoul"),
+            "Response doesn't contain the expected capital city: {response}"
+        );
+    }
 }
