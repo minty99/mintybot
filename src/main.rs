@@ -44,15 +44,41 @@ async fn check_mentioned(ctx: &Context, msg: &Message) -> bool {
     };
 
     let role_mentioned = match msg.guild_id {
-        Some(guild_id) => {
-            let member = guild_id.member(&ctx, user_id).await.unwrap();
-            let roles = member.roles(ctx).unwrap();
-            roles
-                .into_iter()
-                .find_map(|role| (role.name == user_name).then_some(role.id))
-                .map(|id| msg.mention_roles.contains(&id))
-                .unwrap_or(false)
-        }
+        Some(guild_id) => match guild_id.member(&ctx, user_id).await {
+            Ok(member) => {
+                // Try to get roles from cache first, then fall back to HTTP request if needed
+                let roles = match member.roles(ctx) {
+                    Some(roles) => roles,
+                    None => {
+                        // Roles not in cache, fetch them via HTTP
+                        match guild_id.roles(&ctx.http).await {
+                            Ok(all_roles) => {
+                                // Filter roles to only include those assigned to the member
+                                all_roles
+                                    .into_iter()
+                                    .filter(|(role_id, _)| member.roles.contains(role_id))
+                                    .map(|(_, role)| role)
+                                    .collect()
+                            }
+                            Err(err) => {
+                                tracing::error!("Failed to fetch guild roles: {}", err);
+                                Vec::new()
+                            }
+                        }
+                    }
+                };
+
+                roles
+                    .into_iter()
+                    .find_map(|role| (role.name == user_name).then_some(role.id))
+                    .map(|id| msg.mention_roles.contains(&id))
+                    .unwrap_or(false)
+            }
+            Err(err) => {
+                tracing::error!("Failed to get member: {}", err);
+                false
+            }
+        },
         None => false,
     };
     let regular_mentioned = msg.mentions_me(&ctx).await.unwrap_or(false);
