@@ -36,10 +36,11 @@ enum OutputItem {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct MessageOutput {
-    _id: String,
+    id: String,
     status: String,
-    _role: String, // always "assistant"
+    role: String, // always "assistant"
     content: Vec<ContentItem>,
 }
 
