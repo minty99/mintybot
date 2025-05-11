@@ -65,9 +65,9 @@ async fn process_openai_response(response: Response) -> eyre::Result<(String, Re
     tracing::info!(
         "Token usage - Input: {} ({} cached), Output: {} ({} reasoning), Total: {}",
         usage.input_tokens,
-        usage.cached_tokens,
+        usage.input_tokens_details.cached_tokens,
         usage.output_tokens,
-        usage.reasoning_tokens,
+        usage.output_tokens_details.reasoning_tokens,
         usage.total_tokens
     );
 

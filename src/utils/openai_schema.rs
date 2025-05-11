@@ -62,10 +62,18 @@ pub enum ContentItem {
 #[derive(Copy, Clone, Debug, Deserialize)]
 pub struct ResponsesUsage {
     pub input_tokens: u32,
-    #[serde(rename = "input_tokens_details.cached_tokens")]
-    pub cached_tokens: u32,
+    pub input_tokens_details: InputTokensDetails,
     pub output_tokens: u32,
-    #[serde(rename = "output_tokens_details.reasoning_tokens")]
-    pub reasoning_tokens: u32,
+    pub output_tokens_details: OutputTokensDetails,
     pub total_tokens: u32,
+}
+
+#[derive(Copy, Clone, Debug, Deserialize)]
+pub struct InputTokensDetails {
+    pub cached_tokens: u32,
+}
+
+#[derive(Copy, Clone, Debug, Deserialize)]
+pub struct OutputTokensDetails {
+    pub reasoning_tokens: u32,
 }
