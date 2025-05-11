@@ -52,7 +52,7 @@ pub async fn get_chatgpt_response(msg_ctx: &MsgContextInfo) -> eyre::Result<Stri
 
     // Log the conversation (request and response)
     if let Err(e) = log_openai_conversation(msg_ctx, &history, &response_content, duration).await {
-        eprintln!("Failed to log OpenAI conversation: {e}");
+        tracing::error!("Failed to log OpenAI conversation: {e}");
     }
 
     // Store the assistant's response in the conversation history
