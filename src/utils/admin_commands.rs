@@ -39,15 +39,11 @@ pub async fn process_admin_command(
 
     // check admin
     if !is_admin(msg_ctx.author_id) {
-        if let Err(e) = discord::say(
+        let _ = discord::say(
             ctx,
             msg_ctx.channel_id,
             "You are not admin. Request denied.",
-        )
-        .await
-        {
-            tracing::error!("Failed to send message: {e}");
-        }
+        ).await;
         return false;
     }
 
@@ -109,10 +105,7 @@ async fn handle_forget_command(ctx: &Context, msg_ctx: &MsgContextInfo) {
     remove_conversation(channel_id).await;
 
     // Send confirmation message
-    if let Err(why) = discord::say(ctx, channel_id, "Conversation history has been cleared.").await
-    {
-        tracing::error!("Error sending confirmation message: {:?}", why);
-    }
+    let _ = discord::say(ctx, channel_id, "Conversation history has been cleared.").await;
 }
 
 /// Handles the model change command from authorized users
@@ -122,9 +115,7 @@ async fn handle_model_command(ctx: &Context, msg_ctx: &MsgContextInfo, model_nam
     // Trim the model name and check if it's empty
     let model_name = model_name.trim();
     if model_name.is_empty() {
-        let _ = channel_id
-            .say(&ctx.http, "Please specify a model name.")
-            .await;
+        let _ = discord::say(ctx, channel_id, "Please specify a model name.").await;
         return;
     }
 
@@ -132,7 +123,7 @@ async fn handle_model_command(ctx: &Context, msg_ctx: &MsgContextInfo, model_nam
     let response = change_model(model_name).await;
 
     // Send the response
-    let _ = channel_id.say(&ctx.http, response).await;
+    let _ = discord::say(ctx, channel_id, response).await;
 }
 
 /// Handles the status command to display bot state information
@@ -159,9 +150,7 @@ async fn handle_status_command(ctx: &Context, msg_ctx: &MsgContextInfo) {
 - Total history: {total_history_count} messages across {channel_count} channels",
     );
 
-    if let Err(why) = discord::say(ctx, channel_id, &status_message).await {
-        tracing::error!("Error sending status message: {:?}", why);
-    }
+    let _ = discord::say(ctx, channel_id, &status_message).await;
 }
 
 /// Handles the developer message command
@@ -171,9 +160,7 @@ async fn handle_dev_command(ctx: &Context, msg_ctx: &MsgContextInfo, dev_message
     // Trim the developer message and check if it's empty
     let dev_message = dev_message.trim();
     if dev_message.is_empty() {
-        let _ = channel_id
-            .say(&ctx.http, "Please specify a developer message.")
-            .await;
+        let _ = discord::say(ctx, channel_id, "Please specify a developer message.").await;
         return;
     }
 
@@ -182,12 +169,7 @@ async fn handle_dev_command(ctx: &Context, msg_ctx: &MsgContextInfo, dev_message
     add_message(channel_id, ChatMessage::developer(dev_message)).await;
 
     // Send confirmation
-    let _ = channel_id
-        .say(
-            &ctx.http,
-            "Developer message added to conversation history.",
-        )
-        .await;
+    let _ = discord::say(ctx, channel_id, "Developer message added to conversation history.").await;
 }
 
 /// Handles the get personality command
@@ -206,9 +188,7 @@ async fn handle_get_personality_command(ctx: &Context, msg_ctx: &MsgContextInfo)
     );
 
     // Send the message
-    if let Err(why) = discord::say(ctx, channel_id, &message).await {
-        tracing::error!("Error sending personality info: {:?}", why);
-    }
+    let _ = discord::say(ctx, channel_id, &message).await;
 }
 
 /// Handles the set personality command
@@ -222,9 +202,7 @@ async fn handle_set_personality_command(
     // Trim the personality input and check if it's empty
     let personality_input = personality_input.trim();
     if personality_input.is_empty() {
-        let _ = channel_id
-            .say(&ctx.http, "Please specify a personality name.")
-            .await;
+        let _ = discord::say(ctx, channel_id, "Please specify a personality name.").await;
         return;
     }
 
@@ -234,9 +212,7 @@ async fn handle_set_personality_command(
         let custom_prompt = personality_input[7..].trim().to_string();
 
         if custom_prompt.is_empty() {
-            let _ = channel_id
-                .say(&ctx.http, "Please provide a system prompt after 'custom'.")
-                .await;
+            let _ = discord::say(ctx, channel_id, "Please provide a system prompt after 'custom'.").await;
             return;
         }
 
@@ -256,15 +232,10 @@ async fn handle_set_personality_command(
                 // Add custom option
                 available_personalities.push("Custom <system prompt>".to_string());
 
-                let _ = channel_id
-                    .say(
-                        &ctx.http,
-                        format!(
-                            "Unknown personality: {personality_input}\nAvailable personalities: {}",
-                            available_personalities.join(", ")
-                        ),
-                    )
-                    .await;
+                let _ = discord::say(ctx, channel_id, format!(
+                    "Unknown personality: {personality_input}\nAvailable personalities: {}",
+                    available_personalities.join(", ")
+                )).await;
                 return;
             }
         }
@@ -274,10 +245,5 @@ async fn handle_set_personality_command(
     set_channel_personality(channel_id, personality.clone()).await;
 
     // Send confirmation
-    let _ = channel_id
-        .say(
-            &ctx.http,
-            format!("Personality set to {personality} for this channel."),
-        )
-        .await;
+    let _ = discord::say(ctx, channel_id, format!("Personality set to {personality} for this channel.")).await;
 }
