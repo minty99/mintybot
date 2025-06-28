@@ -10,7 +10,7 @@ use std::path::Path;
 use mintybot::discord;
 use mintybot::msg_context::MsgContextInfo;
 use mintybot::openai::get_openai_response;
-use mintybot::statics::DISCORD_TOKEN;
+use mintybot::statics::{DISCORD_TOKEN, is_dev_mode};
 use mintybot::utils::admin_commands::process_admin_command;
 use mintybot::utils::conversation::ChatMessage;
 use mintybot::utils::persistence::add_message;
@@ -128,6 +128,8 @@ impl EventHandler for MintyBotHandler {
     async fn message(&self, ctx: Context, msg: Message) {
         let author = msg.author.clone();
 
+        tracing::info!("Message: {:#?}", msg);
+
         // Skip messages from bots
         if author.bot {
             return;
@@ -234,6 +236,11 @@ async fn main() -> eyre::Result<()> {
 
     // Initialize the tracing subscriber for logging
     tracing_subscriber::fmt::init();
+
+    // Check if we're running in dev mode
+    if is_dev_mode() {
+        tracing::info!("Starting MintyBot in development mode");
+    }
 
     // Ensure only one instance of the bot is running
     let _lock_file = acquire_instance_lock()?;
