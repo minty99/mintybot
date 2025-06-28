@@ -133,8 +133,6 @@ impl EventHandler for MintyBotHandler {
     async fn message(&self, ctx: Context, msg: Message) {
         let author = msg.author.clone();
 
-        tracing::info!("Message: {:#?}", msg);
-
         // Skip messages from bots
         if author.bot {
             return;
@@ -162,16 +160,27 @@ impl EventHandler for MintyBotHandler {
             let selected_name = get_best_name_of_author(&ctx, &msg_ctx).await;
 
             // Extract image URL from attachments if present
-            let image_url = msg.attachments.iter()
+            let image_url = msg
+                .attachments
+                .iter()
                 .find(|attachment| {
-                    attachment.content_type.as_ref()
+                    attachment
+                        .content_type
+                        .as_ref()
                         .map(|ct| ct.starts_with("image/"))
                         .unwrap_or(false)
                 })
                 .map(|attachment| attachment.url.clone());
 
             // Process the mention and send a response
-            process_bot_mention(&ctx, &msg_ctx, content_without_mention, selected_name, image_url).await;
+            process_bot_mention(
+                &ctx,
+                &msg_ctx,
+                content_without_mention,
+                selected_name,
+                image_url,
+            )
+            .await;
         }
     }
 

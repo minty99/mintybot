@@ -201,6 +201,7 @@ pub async fn load_state() -> io::Result<()> {
             let mut current_state = BOT_STATE.lock().await;
             *current_state = state;
             tracing::info!("Bot state loaded successfully");
+            tracing::info!("Current state: {:#?}", current_state);
             Ok(())
         }
         Err(e) => {

@@ -1,3 +1,4 @@
+use crate::utils::openai_schema::ContentItem;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
@@ -7,22 +8,17 @@ pub struct ChatMessage {
     pub content: Vec<ContentItem>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type")]
-pub enum ContentItem {
-    #[serde(rename = "input_text")]
-    Text { text: String },
-    #[serde(rename = "input_image")]
-    Image { image_url: String },
-}
-
 impl Display for ChatMessage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let role_str = format!("<{}>", self.role);
-        let content_str = self.content.iter()
+        let content_str = self
+            .content
+            .iter()
             .map(|item| match item {
-                ContentItem::Text { text } => text.clone(),
-                ContentItem::Image { image_url } => format!("[Image: {}]", image_url),
+                ContentItem::InputText { text } => text.clone(),
+                ContentItem::InputImage { image_url } => format!("[Image: {image_url}]"),
+                ContentItem::OutputText { text } => text.clone(),
+                ContentItem::Other => "[Unknown content]".to_string(),
             })
             .collect::<Vec<_>>()
             .join(" ");
@@ -39,19 +35,23 @@ impl ChatMessage {
 
         Self {
             role: "user".to_string(),
-            content: vec![ContentItem::Text { text: formatted_content }],
+            content: vec![ContentItem::InputText {
+                text: formatted_content,
+            }],
         }
     }
 
     /// Create a new user message with both text and image content
     pub fn user_with_image(text_content: String, name: String, image_url: String) -> Self {
         let formatted_content = format!("({name}) {text_content}");
-        
+
         Self {
             role: "user".to_string(),
             content: vec![
-                ContentItem::Text { text: formatted_content },
-                ContentItem::Image { image_url },
+                ContentItem::InputText {
+                    text: formatted_content,
+                },
+                ContentItem::InputImage { image_url },
             ],
         }
     }
@@ -60,7 +60,7 @@ impl ChatMessage {
     pub fn assistant(content: String) -> Self {
         Self {
             role: "assistant".to_string(),
-            content: vec![ContentItem::Text { text: content }],
+            content: vec![ContentItem::OutputText { text: content }],
         }
     }
 
@@ -68,7 +68,7 @@ impl ChatMessage {
     pub fn developer(content: String) -> Self {
         Self {
             role: "developer".to_string(),
-            content: vec![ContentItem::Text { text: content }],
+            content: vec![ContentItem::InputText { text: content }],
         }
     }
 }

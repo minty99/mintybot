@@ -48,12 +48,16 @@ pub struct MessageOutput {
     pub content: Vec<ContentItem>,
 }
 
-/// Content item in a message
-#[derive(Debug, Deserialize)]
+/// Content item in a message - unified enum for both input and output
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum ContentItem {
+    #[serde(rename = "input_text")]
+    InputText { text: String },
+    #[serde(rename = "input_image")]
+    InputImage { image_url: String },
     #[serde(rename = "output_text")]
-    Text { text: String },
+    OutputText { text: String },
     #[serde(other)]
     Other,
 }
