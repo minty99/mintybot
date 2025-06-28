@@ -8,14 +8,15 @@ use std::sync::Arc;
 use strum_macros::{EnumIter, EnumString};
 use tokio::sync::Mutex;
 
+use crate::statics::get_state_dir_name;
 use crate::utils::conversation::ChatMessage;
 use serenity::model::id::ChannelId;
+
+use super::statics::get_state_file_path;
 
 // Constants
 const DEFAULT_MODEL: &str = "gpt-4.1";
 const MAX_HISTORY_COUNT: usize = 300;
-const STATE_FILE_PATH: &str = "data/bot_state.json";
-const STATE_DIR_PATH: &str = "data";
 const CURRENT_STATE_VERSION: u32 = 2;
 
 /// Bot personality types that define different system prompts
@@ -209,7 +210,7 @@ pub async fn load_state() -> io::Result<()> {
             if e.kind() == io::ErrorKind::NotFound {
                 tracing::info!("No existing state file found, using default state");
                 // Ensure the directory exists for future saves
-                if let Err(create_err) = fs::create_dir_all(STATE_DIR_PATH) {
+                if let Err(create_err) = fs::create_dir_all(get_state_dir_name()) {
                     tracing::error!("Failed to create state directory: {}", create_err);
                     return Err(create_err);
                 }
@@ -225,20 +226,20 @@ pub async fn load_state() -> io::Result<()> {
 /// Save the state to disk using buffered writes for better performance
 fn save_state_to_disk(state: &BotState) -> io::Result<()> {
     // Ensure the directory exists
-    fs::create_dir_all(STATE_DIR_PATH)?;
+    fs::create_dir_all(get_state_dir_name())?;
 
     // Serialize the state to JSON
     let json = serde_json::to_string_pretty(state)?;
 
     // Write to a temporary file first using a buffered writer
-    let temp_path = format!("{STATE_FILE_PATH}.tmp");
+    let temp_path = format!("{}.tmp", get_state_file_path());
     let file = File::create(&temp_path)?;
     let mut writer = BufWriter::new(file);
     writer.write_all(json.as_bytes())?;
     writer.flush()?;
 
     // Rename the temporary file to the actual file (atomic operation)
-    fs::rename(temp_path, STATE_FILE_PATH)?;
+    fs::rename(temp_path, get_state_file_path())?;
 
     Ok(())
 }
@@ -246,7 +247,7 @@ fn save_state_to_disk(state: &BotState) -> io::Result<()> {
 /// Load the state from disk using buffered reads for better performance
 fn load_state_from_disk() -> io::Result<BotState> {
     // Check if the file exists
-    if !Path::new(STATE_FILE_PATH).exists() {
+    if !Path::new(&get_state_file_path()).exists() {
         return Err(io::Error::new(
             io::ErrorKind::NotFound,
             "State file not found",
@@ -254,7 +255,7 @@ fn load_state_from_disk() -> io::Result<BotState> {
     }
 
     // Open and read the file using a buffered reader
-    let file = File::open(STATE_FILE_PATH)?;
+    let file = File::open(get_state_file_path())?;
     let mut reader = BufReader::new(file);
     let mut contents = String::new();
     reader.read_to_string(&mut contents)?;

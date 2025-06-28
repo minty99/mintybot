@@ -10,7 +10,7 @@ use std::path::Path;
 use mintybot::discord;
 use mintybot::msg_context::MsgContextInfo;
 use mintybot::openai::get_openai_response;
-use mintybot::statics::{DISCORD_TOKEN, is_dev_mode};
+use mintybot::statics::{DISCORD_TOKEN, get_state_dir_name, is_dev_mode};
 use mintybot::utils::admin_commands::process_admin_command;
 use mintybot::utils::conversation::ChatMessage;
 use mintybot::utils::persistence::add_message;
@@ -225,7 +225,7 @@ async fn get_best_name_of_author(ctx: &Context, msg_ctx: &MsgContextInfo) -> Str
 /// Acquire a file lock to ensure only one instance of the bot is running
 fn acquire_instance_lock() -> eyre::Result<File> {
     // Create data directory if it doesn't exist
-    let lock_path = Path::new("data");
+    let lock_path = Path::new(get_state_dir_name());
     if !lock_path.exists() {
         std::fs::create_dir_all(lock_path)?;
     }

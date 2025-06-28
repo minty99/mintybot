@@ -10,6 +10,7 @@ use crate::utils::conversation::ChatMessage;
 use crate::utils::openai_schema::ResponsesUsage;
 
 use super::msg_context::MsgContextInfo;
+use super::statics::get_state_dir_name;
 
 // Global logger instance
 lazy_static::lazy_static! {
@@ -18,7 +19,8 @@ lazy_static::lazy_static! {
 
 impl Default for Logger {
     fn default() -> Self {
-        Self::new("data/logs")
+        let state_dir = get_state_dir_name();
+        Self::new(&format!("{state_dir}/logs"))
     }
 }
 

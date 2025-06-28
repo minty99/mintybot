@@ -14,11 +14,19 @@ pub fn is_dev_mode() -> bool {
     *IS_DEV_MODE.get_or_init(|| std::env::args().any(|arg| arg == "--dev"))
 }
 
-fn get_discord_token_env_name() -> String {
+pub fn get_state_dir_name() -> &'static str {
+    if is_dev_mode() { "data_dev" } else { "data" }
+}
+
+pub fn get_state_file_path() -> String {
+    format!("{}/bot_state.json", get_state_dir_name())
+}
+
+fn get_discord_token_env_name() -> &'static str {
     if is_dev_mode() {
-        "MINTYBOT_DISCORD_TOKEN_DEV".to_string()
+        "MINTYBOT_DISCORD_TOKEN_DEV"
     } else {
-        "MINTYBOT_DISCORD_TOKEN".to_string()
+        "MINTYBOT_DISCORD_TOKEN"
     }
 }
 
