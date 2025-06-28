@@ -39,6 +39,8 @@ async fn send_responses_api_request(
     let client = Client::new();
     let request = ResponsesRequest::new(messages).await;
 
+    tracing::info!("Request: {:#?}", request);
+
     let response = client
         .post("https://api.openai.com/v1/responses")
         .header("Authorization", format!("Bearer {}", *OPENAI_TOKEN))
@@ -86,7 +88,7 @@ async fn process_openai_response(response: Response) -> eyre::Result<(String, Re
                         );
                         return None;
                     }
-                    if let ContentItem::Text { text, .. } = content_item {
+                    if let ContentItem::OutputText { text } = content_item {
                         Some(text.clone())
                     } else {
                         None
@@ -127,7 +129,9 @@ mod tests {
             // Create system message
             ChatMessage {
                 role: "system".to_string(),
-                content: "You are a helpful assistant.".to_string(),
+                content: vec![ContentItem::InputText {
+                    text: "You are a helpful assistant.".to_string(),
+                }],
             },
             // Add a user message
             ChatMessage::user(
