@@ -39,8 +39,6 @@ async fn send_responses_api_request(
     let client = Client::new();
     let request = ResponsesRequest::new(messages).await;
 
-    tracing::info!("Request: {:#?}", request);
-
     let response = client
         .post("https://api.openai.com/v1/responses")
         .header("Authorization", format!("Bearer {}", *OPENAI_TOKEN))
