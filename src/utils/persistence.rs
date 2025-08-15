@@ -15,7 +15,7 @@ use serenity::model::id::ChannelId;
 use super::statics::get_state_file_path;
 
 // Constants
-const DEFAULT_MODEL: &str = "gpt-4.1";
+const DEFAULT_MODEL: &str = "gpt-5";
 const MAX_HISTORY_COUNT: usize = 300;
 const CURRENT_STATE_VERSION: u32 = 2;
 
